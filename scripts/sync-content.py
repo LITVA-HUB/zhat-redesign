@@ -9,7 +9,7 @@ import json,re,sys,time
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://zhat.ru'
 OUT=ROOT/'src/content.json'
-ALLOWED=set('p div span h1 h2 h3 h4 h5 h6 a img ul ol li table thead tbody tfoot tr td th strong b em i u br hr blockquote dl dt dd figure figcaption details summary small sup sub'.split())
+ALLOWED=set('p div span h1 h2 h3 h4 h5 h6 a img ul ol li table thead tbody tfoot tr td th strong b em i u br hr blockquote dl dt dd figure figcaption details summary small sup sub video audio source'.split())
 def key(url):
  u=urlsplit(urljoin(BASE,url)); q=parse_qs(u.query)
  if u.hostname not in ('zhat.ru','www.zhat.ru'): return None
@@ -28,13 +28,26 @@ def clean(node,url):
  for t in list(node.find_all(True)):
   if t.name not in ALLOWED:t.unwrap();continue
   attrs={}
+  if t.get('id'):attrs['id']='source-'+t['id']
   if t.name=='a':
-   href=urljoin(url,t.get('href',''))
+   raw=t.get('href','').strip()
+   if not raw or raw=='#':
+    if raw=='#':t.append(' — ссылка пока не опубликована на сайте ЖАТ')
+    t.unwrap();continue
+   href=urljoin(url,raw)
    if urlsplit(href).scheme in ('http','https','mailto','tel'):
-    attrs={'href':href,'target':'_blank','rel':'noopener noreferrer'}
+    attrs.update({'href':href,'target':'_blank','rel':'noopener noreferrer'})
   if t.name=='img':
    src=urljoin(url,t.get('src',''))
    if urlsplit(src).scheme in ('http','https'):attrs={'src':src,'alt':t.get('alt',''),'loading':'lazy'}
+  if t.name in ('video','audio','source'):
+   src=urljoin(url,t.get('src','')) if t.get('src') else ''
+   if src and urlsplit(src).scheme in ('http','https'):attrs['src']=src
+   if t.name!='source':
+    attrs.update({'controls':'','preload':'none'})
+    poster=urljoin(url,t.get('poster','')) if t.get('poster') else ''
+    if poster and urlsplit(poster).scheme in ('http','https'):attrs['poster']=poster
+   elif t.get('type'):attrs['type']=t['type']
   if t.name in ('td','th'):
    for a in ('colspan','rowspan'):
     if str(t.get(a,'')).isdigit():attrs[a]=t[a]
@@ -47,16 +60,21 @@ def parse_page(item):
  url,title=item
  try:
   soup=BeautifulSoup(fetch(url),'html.parser')
-  node=soup.select_one('.item-page') or soup.select_one('.items-leading') or soup.select_one('.category-list') or soup.select_one('.blog') or soup.select_one('div.news')
+  node=soup.select_one('[itemprop=articleBody]') or soup.select_one('.item-page') or soup.select_one('.blog') or soup.select_one('.category-list') or soup.select_one('div.news')
   if not node:raise ValueError('Не найден блок содержимого')
   if key(url)=='/article/867':
    node=soup.select_one('ul.category-module') or node
   if title=='Специальность':
-   heading=node.select_one('h1,h2');title=heading.get_text(' ',strip=True) if heading else title
+   heading=soup.select_one('.item-title') or node.select_one('h1,h2');title=heading.get_text(' ',strip=True) if heading else title
+  for pager in node.select('.pager,.pagenav'):pager.decompose()
   html=clean(node,url)
   text=BeautifulSoup(html,'html.parser').get_text(' ',strip=True)
-  if len(text)<8 and '<img' not in html:raise ValueError('Пустой материал')
-  return {'key':key(url),'url':url,'title':title or (soup.title.get_text(strip=True) if soup.title else 'Материал'),'html':html,'text':text,'error':None}
+  body=BeautifulSoup(html,'html.parser')
+  resources=[{'title':a.get_text(' ',strip=True) or 'Открыть документ','url':a['href']} for a in body.select('a[href]') if re.search(r'\.(pdf|docx?|xlsx?|pptx?|zip|rar)(?:$|\?)',a['href'],re.I)]
+  resources=list({r['url']:r for r in resources}.values())
+  empty=not text and not body.select('img,video,audio,a[href]')
+  pending=empty or text=='Раздел находится в разработке'
+  return {'key':key(url),'url':url,'title':title or (soup.title.get_text(strip=True) if soup.title else 'Материал'),'html':html,'text':text,'resources':resources,'empty':bool(empty),'pending':bool(pending),'error':None}
  except Exception as e:return {'key':key(url),'url':url,'title':title or 'Материал','html':'','text':'','error':str(e)}
 def main():
  home=BeautifulSoup(fetch(BASE+'/'),'html.parser')
@@ -82,6 +100,8 @@ def main():
  data=(ROOT/'src/data.js').read_text();ids=re.findall(r'course\(\s*(\d+)',data)
  for id in ids:add(BASE+'/?view=article&id='+id,'Специальность')
  forms=[{'title':a.get_text(' ',strip=True),'url':a['href']} for a in home.select('a[href]') if 'forms.yandex.ru/' in a['href']]
+ if OUT.exists():
+  for previous in json.loads(OUT.read_text()).get('pages',[]):add(previous['url'],previous['title'])
  print('Importing',len(seeds),'navigation pages',flush=True)
  with ThreadPoolExecutor(max_workers=5) as pool:pages=list(pool.map(parse_page,seeds.values()))
  # Follow named article links from core sections, but keep the historical news archive as an index.
@@ -100,7 +120,7 @@ def main():
   soup=BeautifulSoup(p['html'],'html.parser')
   for a in soup.select('a[href]'):
    k=key(a['href'])
-   if k in good:a['href']='#/page/'+__import__('urllib.parse',fromlist=['quote']).quote(k,safe='');a.attrs.pop('target',None);a.attrs.pop('rel',None)
+   if k in good and not urlsplit(a['href']).fragment:a['href']='#/page/'+__import__('urllib.parse',fromlist=['quote']).quote(k,safe='');a.attrs.pop('target',None);a.attrs.pop('rel',None)
   p['html']=str(soup)
  archive_soup=BeautifulSoup(fetch(BASE+'/?view=article&id=867&catid=26'),'html.parser')
  archive=[{'key':key(a['href']),'title':a.get_text(' ',strip=True),'url':urljoin(BASE,a['href'])} for a in archive_soup.select('a.mod-articles-category-title')]
@@ -110,7 +130,7 @@ def main():
   filename=__import__('hashlib').sha256(p['key'].encode()).hexdigest()[:20]+'.json'
   (directory/filename).write_text(json.dumps(p,ensure_ascii=False))
   p['contentFile']='/content/'+filename
-  p.pop('html',None);p['text']=p['text'][:2000]
+  p.pop('html',None);p.pop('resources',None);p['text']=p['text'][:2000]
  for a in archive:a['url']=BASE+'/?view=article&id='+a['key'].split('/')[-1]+'&catid=26'
  (directory/'archive.json').write_text(json.dumps(archive,ensure_ascii=False))
  result={'archiveCount':len(archive),'updatedAt':datetime.now(timezone.utc).isoformat(),'groups':groups,'news':news,'forms':forms,'pages':pages}

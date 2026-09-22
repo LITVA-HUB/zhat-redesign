@@ -13,7 +13,8 @@
     "test:content": "python3 -m unittest discover -s tests -p \"test_*.py\"",
     "refresh": "npm run sync:content && npm run build",
     "predev": "node scripts/sync-if-stale.mjs",
-    "prestart": "node scripts/sync-if-stale.mjs && npm run build"
+    "prestart": "node scripts/sync-if-stale.mjs && npm run build",
+    "audit:sections": "python3 scripts/audit-sections.py"
   },
   "dependencies": {
     "@fontsource-variable/golos-text": "^5.3.0",

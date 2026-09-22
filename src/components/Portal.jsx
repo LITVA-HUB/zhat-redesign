@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -7,8 +7,16 @@ import {
   FileText,
   CalendarBlank,
 } from "@phosphor-icons/react";
-import { content, pageHref, localHref, syncedDate } from "../portal-data";
+import {
+  content,
+  pageHref,
+  localHref,
+  sourceKey,
+  syncedDate,
+} from "../portal-data";
 import "./portal.css";
+import sourceHealth from "../source-health.json";
+import { sectionGuides } from "../section-guides";
 export function usePortalRoute() {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
@@ -76,6 +84,11 @@ export function ServiceBar() {
   );
 }
 export function SectionDirectory({ compact = false }) {
+  const [query, setQuery] = useState("");
+  const matches = (link) =>
+    link.title
+      .toLocaleLowerCase("ru")
+      .includes(query.trim().toLocaleLowerCase("ru"));
   return (
     <section className={compact ? "directory-home wrap" : "directory"}>
       <div className="portal-section-heading">
@@ -89,24 +102,55 @@ export function SectionDirectory({ compact = false }) {
           </a>
         )}
       </div>
+      {!compact && (
+        <label className="portal-search">
+          <MagnifyingGlass />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти раздел: практика, документы, приём…"
+            aria-label="Найти раздел"
+          />
+        </label>
+      )}
+      {!compact && (
+        <p className="sync-note">
+          Шесть разделов ·{" "}
+          {content.groups.reduce((sum, g) => sum + g.links.length, 0)} тем.
+          Выберите нужную или найдите по названию.
+        </p>
+      )}
+      {query && !content.groups.some((g) => g.links.some(matches)) && (
+        <p role="status" className="empty-state">
+          Такого раздела нет. Попробуйте другое слово или{" "}
+          <a href="#/search">поиск по всем материалам</a>.
+        </p>
+      )}
       <div className="directory-grid">
-        {content.groups.map((group, i) => (
-          <details key={group.title}>
-            <summary>
-              <span className="directory-number">0{i + 1}</span>
-              <span>{shortTitles[group.title] || group.title}</span>
-              <span className="directory-plus">+</span>
-            </summary>
-            <div>
-              {group.links.map((l, j) => (
-                <a href={pageHref(l.key)} key={j}>
-                  {l.title}
-                  <ArrowUpRight size={16} />
-                </a>
-              ))}
-            </div>
-          </details>
-        ))}
+        {content.groups.map(
+          (group, i) =>
+            (!query || group.links.some(matches)) && (
+              <details
+                key={group.title + Boolean(query)}
+                open={query ? true : undefined}
+              >
+                <summary>
+                  <span className="directory-number">0{i + 1}</span>
+                  <span>{shortTitles[group.title] || group.title}</span>
+                  <span className="directory-plus">+</span>
+                </summary>
+                <div>
+                  {group.links.filter(matches).map((l, j) => (
+                    <a href={pageHref(l.key)} key={j}>
+                      {l.title}
+                      <ArrowUpRight size={16} />
+                    </a>
+                  ))}
+                </div>
+              </details>
+            ),
+        )}
       </div>
     </section>
   );
@@ -408,13 +452,57 @@ function Article({ pageKey }) {
     return () => controller.abort();
   }, [pageKey, retry, entry]);
   const page = loaded;
+  const articleHTML = useMemo(() => {
+    if (!page?.html) return "";
+    const doc = new DOMParser().parseFromString(page.html, "text/html");
+    for (const link of doc.querySelectorAll("a[href]")) {
+      if (!sourceHealth.unavailable[link.getAttribute("href")]) continue;
+      const note = doc.createElement("small");
+      note.className = "unavailable-file";
+      note.textContent =
+        " — недоступно при проверке " +
+        new Date(sourceHealth.checkedAt).toLocaleDateString("ru");
+      link.append(note);
+    }
+    for (const img of doc.querySelectorAll("img[src]")) {
+      if (!sourceHealth.unavailable[img.getAttribute("src")]) continue;
+      const note = doc.createElement("span");
+      note.className = "unavailable-file";
+      note.textContent = "Изображение недоступно на сайте ЖАТ";
+      img.replaceWith(note);
+    }
+    return doc.body.innerHTML;
+  }, [page]);
+  const section = content.groups.find((g) =>
+    g.links.some((l) => l.key === pageKey),
+  );
+  const guide = sectionGuides[pageKey];
+  const [documentQuery, setDocumentQuery] = useState("");
+  const documents = (page?.resources || []).filter((r) =>
+    r.title
+      .toLocaleLowerCase("ru")
+      .includes(documentQuery.toLocaleLowerCase("ru")),
+  );
   useEffect(() => {
     if (entry) document.title = entry.title + " — ЖАТ";
   }, [entry]);
   const clickContent = (e) => {
     const a = e.target.closest("a");
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    const local = localHref(a.getAttribute("href"));
+    const href = a.getAttribute("href");
+    if (!href) return;
+    const url = new URL(href, "https://zhat.ru");
+    if (url.hash && !href.startsWith("#/") && sourceKey(href) === pageKey) {
+      const target = document.getElementById(
+        "source-" + decodeURIComponent(url.hash.slice(1)),
+      );
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    }
+    const local = localHref(href);
     if (local.startsWith("#")) {
       e.preventDefault();
       location.hash = local;
@@ -447,6 +535,85 @@ function Article({ pageKey }) {
           На официальном сайте <ArrowUpRight />
         </a>
       </div>
+      {section && (
+        <details className="section-jump">
+          <summary>
+            В этом разделе: {shortTitles[section.title] || section.title}
+          </summary>
+          <nav aria-label="Темы раздела">
+            {section.links.map((l) => (
+              <a
+                key={l.key}
+                href={pageHref(l.key)}
+                aria-current={l.key === pageKey ? "page" : undefined}
+              >
+                {l.title}
+                <ArrowRight size={16} />
+              </a>
+            ))}
+          </nav>
+        </details>
+      )}
+      {guide?.message && (
+        <aside className="source-notice">
+          <h2>Что доступно сейчас</h2>
+          <p>{guide.message}</p>
+          <a href="#/feedback">Уточнить у техникума →</a>
+        </aside>
+      )}
+      {page?.pending && !guide?.message && (
+        <aside className="source-notice">
+          <p>Техникум пока не опубликовал материалы на этой странице.</p>
+          <a href="#/feedback">Уточнить информацию →</a>
+        </aside>
+      )}
+      {!!page?.resources?.length && (
+        <details className="document-panel">
+          <summary>
+            <FileText /> Документы и файлы · {page.resources.length}
+          </summary>
+          {page.resources.length > 5 && (
+            <label className="portal-search">
+              <MagnifyingGlass />
+              <input
+                value={documentQuery}
+                onChange={(e) => setDocumentQuery(e.target.value)}
+                placeholder="Найти документ на странице"
+                aria-label="Найти документ на странице"
+                type="search"
+              />
+            </label>
+          )}
+          <div className="document-list">
+            {documents.map((r) => (
+              <a
+                key={r.url}
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <FileText size={20} />
+                <span>
+                  {r.title}
+                  {sourceHealth.unavailable[r.url] && (
+                    <small className="unavailable-file">
+                      Файл недоступен при проверке{" "}
+                      {new Date(sourceHealth.checkedAt).toLocaleDateString(
+                        "ru",
+                      )}
+                      . Уточните в техникуме.
+                    </small>
+                  )}
+                </span>
+                <ArrowUpRight size={18} />
+              </a>
+            ))}
+          </div>
+          {!documents.length && (
+            <p role="status">Документов с таким названием нет.</p>
+          )}
+        </details>
+      )}
       {group && stored?.error ? (
         <div className="archive-list">
           {group.links.slice(1).map((l) => (
@@ -460,7 +627,7 @@ function Article({ pageKey }) {
         <article
           className="imported-content"
           onClick={clickContent}
-          dangerouslySetInnerHTML={{ __html: page.html }}
+          dangerouslySetInnerHTML={{ __html: articleHTML }}
         />
       ) : error ? (
         <div className="empty-state">
@@ -482,6 +649,24 @@ function Article({ pageKey }) {
         <p className="empty-state" role="status">
           Загружаем материал…
         </p>
+      )}
+      {guide?.links?.length > 0 && (
+        <section className="related-materials">
+          <h2>Полезные материалы</h2>
+          <div className="archive-list">
+            {guide.links.map((key) => {
+              const related = content.pages.find((p) => p.key === key);
+              return (
+                related && (
+                  <a key={key} href={pageHref(key)}>
+                    {related.title}
+                    <ArrowUpRight />
+                  </a>
+                )
+              );
+            })}
+          </div>
+        </section>
       )}
       <div className="page-bottom">
         <a href="#/sections">← Все разделы</a>

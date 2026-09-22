@@ -1,5 +1,6 @@
 import unittest,importlib.util,json
 from pathlib import Path
+from unittest.mock import patch
 from bs4 import BeautifulSoup
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('sync',ROOT/'scripts/sync-content.py');sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
@@ -26,6 +27,38 @@ class ContentTests(unittest.TestCase):
  def test_archive_keys_unique(self):
   archive=json.loads((ROOT/'public/content/archive.json').read_text());self.assertGreater(len(archive),3000)
   self.assertEqual(len({p['key'] for p in archive}),len(archive))
+ def test_media_survives_without_autoplay_or_handlers(self):
+  s=BeautifulSoup(sync.clean('<video autoplay onplay="bad()" poster="/p.jpg"><source src="/v.mp4" type="video/mp4"></video>',sync.BASE),'html.parser')
+  self.assertEqual(s.source['src'],'https://zhat.ru/v.mp4')
+  self.assertEqual(s.video['preload'],'none')
+  self.assertIn('controls',s.video.attrs)
+  self.assertNotIn('autoplay',s.video.attrs)
+  self.assertNotIn('onplay',s.video.attrs)
+ def test_placeholder_and_wrapper_are_not_fake_links(self):
+  s=BeautifulSoup(sync.clean('<a href="#">Скачать</a><a><a href="/files/a.pdf">Документ</a></a><h2 id="part">Тема</h2><a href="#part">К теме</a>',sync.BASE),'html.parser')
+  self.assertEqual(len(s.select('a[href]')),2)
+  self.assertEqual(s.h2['id'],'source-part')
+  self.assertEqual(s.select('a')[-1]['href'],'https://zhat.ru#part')
+ def test_empty_article_not_mistaken_for_content(self):
+  with patch.object(sync,'fetch',return_value='<div class="item-page"><h2>Название</h2><div itemprop="articleBody"></div><ul class="pager"><a href="/next">Вперёд</a></ul></div>'):
+   p=sync.parse_page(('https://zhat.ru/empty','Название'))
+  self.assertTrue(p['pending']);self.assertTrue(p['empty']);self.assertIsNone(p['error'])
+ def test_category_import_includes_intro_articles(self):
+  with patch.object(sync,'fetch',return_value='<div class="blog"><div class="items-leading">Первая новость</div><div class="items-row">Вторая новость</div></div>'):
+   p=sync.parse_page(('https://zhat.ru/category','Категория'))
+  self.assertIn('Вторая новость',p['text'])
+ def test_every_section_has_content_or_explicit_source_state(self):
+  d=json.loads((ROOT/'src/content.json').read_text());pages={p['key']:p for p in d['pages']}
+  self.assertEqual(sum(len(g['links']) for g in d['groups']),79)
+  for g in d['groups']:
+   for l in g['links']:
+    p=pages[l['key']];body=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text())
+    self.assertTrue(body.get('error') or body.get('pending') or BeautifulSoup(body['html'],'html.parser').get_text(strip=True) or BeautifulSoup(body['html'],'html.parser').select('img,video,audio,a[href]'),l['key'])
+ def test_download_index_unique(self):
+  d=json.loads((ROOT/'src/content.json').read_text())
+  for p in d['pages']:
+   b=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text());urls=[r['url'] for r in b.get('resources',[])]
+   self.assertEqual(len(urls),len(set(urls)))
  def test_key_normalization(self):
   self.assertEqual(sync.key('https://zhat.ru/?view=article&id=123:slug&catid=26'),'/article/123')
   self.assertIsNone(sync.key('https://evil.example/path'))

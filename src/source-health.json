@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-09-22T13:19:16.001318+00:00",
+  "checked": 620,
+  "available": 600,
+  "unavailable": {
+    "https://zhat.ru/files/sveden/education/23.02.01/23_02_01_OPOP.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/23.02.01/23_02_01_Akt_soglasovania.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/23.02.01/Annot_Napr_23.02.01.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.01/25_02_01_OPOP.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.01/25_02_01_Akt_soglasovania.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.01/Annot_Napr_25.02.01.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.03/25_02_03_OPOP.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.03/25_02_03_Akt_soglasovania.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/25.02.03/Annot_Napr_25.02.03.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/43.02.06/43_02_06_OPOP.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/43.02.06/43_02_06_Akt_soglasovania.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/education/43.02.06/Annot_Napr_43.02.06.pdf": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/employees/photo/maslennikov.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/employees/photo/skotnikova.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/accessenv/библиотека.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/accessenv/буфет.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/employees/photo/.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/employees/photo/trifonova.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/sveden/employees/photo/chistov.jpg": "HTTP Error 404: Not Found",
+    "https://zhat.ru/files/abiturient/admission_committee/ИНФОРМАЦИЯ О РЕЗУЛЬТАТАХ ОПРОСОВ ПЕДАГОГИЧЕСКИХ РАБОТНИКОВ ОБРАЗОВАТЕЛЬНОЙ ОРГАНИЗАЦИИ СРЕДНЕГО ПРОФЕССИОНАЛЬНОГО ОБРАЗОВАНИЯ ОБ УДОВЛЕТВОРЕННОСТИ КАЧЕСТВОМ ОБРАЗОВАТЕЛЬНОЙ ДЕЯТЕЛЬНОСТИ.pdf": "HTTP Error 403: Forbidden"
+  }
+}

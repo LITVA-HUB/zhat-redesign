@@ -470,3 +470,126 @@
 .imported-content > div > div:first-child:has(> table h2) {
   display: none;
 }
+.section-jump,
+.document-panel {
+  margin: 24px 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 20px 24px;
+  background: #f6f9fb;
+}
+.section-jump summary,
+.document-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.document-panel summary svg {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.section-jump nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 24px;
+  margin-top: 16px;
+}
+.section-jump nav a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.section-jump nav a[aria-current="page"] {
+  background: #e4edf3;
+  font-weight: 700;
+}
+.section-jump nav svg {
+  flex-shrink: 0;
+}
+.source-notice {
+  background: #fff4ec;
+  border-left: 4px solid #ff633c;
+  border-radius: 0 16px 16px 0;
+  padding: 24px;
+  margin: 24px 0;
+  line-height: 1.7;
+}
+.source-notice h2,
+.related-materials h2 {
+  font-size: 24px !important;
+  margin: 0 0 12px !important;
+  letter-spacing: -0.5px !important;
+}
+.source-notice a {
+  display: inline-block;
+  font-weight: 700;
+  margin-top: 12px;
+}
+.document-list {
+  display: grid;
+  margin-top: 16px;
+}
+.document-list a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.document-list span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.document-list svg {
+  flex-shrink: 0;
+}
+.related-materials {
+  margin-top: 40px;
+}
+.imported-content video,
+.imported-content audio {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  margin: 24px auto;
+  border-radius: 16px;
+  background: #142530;
+}
+.imported-content [id] {
+  scroll-margin-top: 110px;
+}
+.imported-content a {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .section-jump nav {
+    grid-template-columns: 1fr;
+  }
+  .section-jump,
+  .document-panel {
+    padding: 18px;
+  }
+  .source-notice {
+    padding: 20px;
+  }
+  .source-notice h2,
+  .related-materials h2 {
+    font-size: 21px !important;
+  }
+}
+.unavailable-file {
+  display: block;
+  color: #a13c22;
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 500;
+  margin-top: 5px;
+}

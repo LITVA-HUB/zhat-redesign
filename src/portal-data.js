@@ -16,6 +16,8 @@ export function sourceKey(href) {
 }
 export const pageHref = (key) => "#/page/" + encodeURIComponent(key);
 export function localHref(href) {
+  if (!href || href.startsWith("#") || new URL(href, "https://zhat.ru").hash)
+    return href;
   const key = sourceKey(href);
   if (key === "/" && /^https:\/\/zhat.ru\/?$/.test(href)) return "#top";
   return content.pages.some((p) => p.key === key) ||
