@@ -32,7 +32,7 @@ def clean(node,url):
   if t.name=='a':
    raw=t.get('href','').strip()
    if not raw or raw=='#':
-    if raw=='#':t.append(' — ссылка пока не опубликована на сайте ЖАТ')
+    if raw=='#' and 'скачать' in t.get_text(' ',strip=True).lower():t.append(' — ссылка пока не опубликована на сайте ЖАТ')
     t.unwrap();continue
    href=urljoin(url,raw)
    if urlsplit(href).scheme in ('http','https','mailto','tel'):

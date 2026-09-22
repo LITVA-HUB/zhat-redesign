@@ -39,6 +39,9 @@ class ContentTests(unittest.TestCase):
   self.assertEqual(len(s.select('a[href]')),2)
   self.assertEqual(s.h2['id'],'source-part')
   self.assertEqual(s.select('a')[-1]['href'],'https://zhat.ru#part')
+ def test_source_section_toggles_are_not_missing_downloads(self):
+  html=sync.clean('<a href="#">Документы</a><a href="#">Скачать заявление</a>',sync.BASE)
+  self.assertEqual(html.count('ссылка пока не опубликована'),1)
  def test_empty_article_not_mistaken_for_content(self):
   with patch.object(sync,'fetch',return_value='<div class="item-page"><h2>Название</h2><div itemprop="articleBody"></div><ul class="pager"><a href="/next">Вперёд</a></ul></div>'):
    p=sync.parse_page(('https://zhat.ru/empty','Название'))
