@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { admissionUrl, official, studentLinks } from "../data";
 import { useSiteData } from "../site-data";
+import { phoneHref } from "../phone";
 export function ExternalLink({ href, children, className = "", ...rest }) {
   const destination = localHref(href);
   const internal = destination.startsWith("#");
@@ -114,7 +115,7 @@ export function Dialog({ content, onClose }) {
             <ExternalLink href={p.url} className="button primary">
               О специальности <ArrowUpRight size={20} />
             </ExternalLink>
-            <a href={"tel:+" + siteSettings.admissionPhone.replace(/\D/g, "")} className="contact-inline">
+            <a href={phoneHref(siteSettings.admissionPhone)} className="contact-inline">
               <Phone size={19} /> {siteSettings.admissionPhone}
             </a>
           </>
@@ -147,7 +148,7 @@ export function Dialog({ content, onClose }) {
                 <span>03</span>
                 <div>
                   <h3>Свяжись с приёмной комиссией</h3>
-                  <p>Жуковский, ул. Кирова, 3, корпус 4, аудитория 15.</p>
+                  <p>{siteSettings.admissionAddress}. Уточните кабинет перед визитом.</p>
                 </div>
               </li>
             </ol>
@@ -162,8 +163,8 @@ export function Dialog({ content, onClose }) {
             <ExternalLink className="button primary" href={admissionUrl}>
               Условия поступления <ArrowUpRight size={20} />
             </ExternalLink>
-            <a className="contact-inline" href="tel:+79260760893">
-              <Phone size={20} /> +7 (926) 076-08-93
+            <a className="contact-inline" href={phoneHref(siteSettings.admissionPhone)}>
+              <Phone size={20} /> {siteSettings.admissionPhone}
             </a>
           </>
         ) : null}
@@ -206,8 +207,8 @@ export function Dialog({ content, onClose }) {
                 </ExternalLink>
               ))}
             </div>
-            <a href="tel:+79161970205" className="contact-inline">
-              <Phone size={20} /> +7 (916) 197-02-05
+            <a href={phoneHref(siteSettings.generalPhone)} className="contact-inline">
+              <Phone size={20} /> {siteSettings.generalPhone}
             </a>
           </>
         ) : null}

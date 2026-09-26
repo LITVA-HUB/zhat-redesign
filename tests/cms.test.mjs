@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createCmsStore } from "../scripts/cms-store.mjs";
 import { createCmsHandler } from "../scripts/cms-api.mjs";
+import { isValidPhone, phoneHref } from "../src/phone.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const catalogue = JSON.parse(await readFile(join(root, "src/content.json"), "utf8"));
@@ -93,8 +94,42 @@ test("редактор: вход, черновик, публикация, пра
     assert.equal(publishedPage.status, 200);
     assert.ok((await api("/api/admin/menu")).data.groups[0].links.some((item) => item.key === newPage.data.key));
     assert.equal((await api("/api/site/page?key=" + encodeURIComponent(newPage.data.key))).data.title, "Новая страница");
+    const archivedPage = await api("/api/admin/entry", { method: "PUT", body: {
+      ...publishedPage.data, status: "archived", expectedVersion: 2,
+    } });
+    assert.equal(archivedPage.status, 200);
+    assert.ok(!(await api("/api/site")).data.groups[0].links.some((item) => item.key === newPage.data.key), "Скрытая страница исчезает из публичного меню");
+    assert.ok((await api("/api/admin/menu")).data.groups[0].links.some((item) => item.key === newPage.data.key), "Администратор сохраняет пункт для восстановления");
+    assert.equal((await api("/api/site/page?key=" + encodeURIComponent(newPage.data.key))).status, 404);
+    const republishedPage = await api("/api/admin/entry", { method: "PUT", body: {
+      ...archivedPage.data, status: "published", expectedVersion: 3,
+    } });
+    assert.equal(republishedPage.status, 200);
+    assert.ok((await api("/api/site")).data.groups[0].links.some((item) => item.key === newPage.data.key), "После публикации пункт снова виден");
+    const movedPage = await api("/api/admin/entry", { method: "PUT", body: {
+      ...republishedPage.data, group: catalogue.groups[1].title, status: "published", expectedVersion: 4,
+    } });
+    assert.equal(movedPage.status, 200);
+    const movedMenu = (await api("/api/site")).data.groups;
+    assert.ok(!movedMenu[0].links.some((item) => item.key === newPage.data.key), "Страница исчезает из прежнего раздела");
+    assert.ok(movedMenu[1].links.some((item) => item.key === newPage.data.key), "Смена раздела перемещает страницу");
+    const pageRevisions = (await api("/api/admin/revisions?key=" + encodeURIComponent(newPage.data.key))).data.items;
+    const restoredGroup = await api("/api/admin/restore", { method: "POST", body: {
+      key: newPage.data.key, revisionId: pageRevisions[0].id,
+    } });
+    assert.equal(restoredGroup.status, 200);
+    assert.equal(restoredGroup.data.group, group);
+    const restoredMenu = (await api("/api/site")).data.groups;
+    assert.ok(restoredMenu[0].links.some((item) => item.key === newPage.data.key), "Восстановление версии возвращает прежний раздел");
+    assert.ok(!restoredMenu[1].links.some((item) => item.key === newPage.data.key));
+    const restoredDraft = await api("/api/admin/restore", { method: "POST", body: {
+      key: newPage.data.key, revisionId: pageRevisions.at(-1).id,
+    } });
+    assert.equal(restoredDraft.status, 200);
+    assert.equal(restoredDraft.data.status, "draft");
+    assert.ok(!(await api("/api/site")).data.groups[0].links.some((item) => item.key === newPage.data.key), "Восстановленный черновик не оставляет битую ссылку");
     assert.equal((await api("/api/admin/entry", { method: "PUT", body: {
-      ...publishedPage.data, image: "javascript:alert(1)", expectedVersion: 2,
+      ...restoredDraft.data, image: "javascript:alert(1)", expectedVersion: 7,
     } })).status, 400);
 
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
@@ -133,23 +168,34 @@ test("редактор: вход, черновик, публикация, пра
     } })).status, 400);
     const settings = (await api("/api/admin/settings")).data;
     assert.match(settings.values.admissionPhone, /926/);
+    assert.equal(phoneHref(settings.values.admissionPhone), "tel:+79260760893");
+    assert.equal(phoneHref("8 (926) 076-08-93"), "tel:+79260760893");
+    assert.equal(phoneHref("926 076-08-93"), "tel:+79260760893");
+    assert.equal(isValidPhone("+7 (926) 076-08-93"), true);
+    assert.equal(isValidPhone("12345"), false);
     const values = { ...settings.values, admissionPhone: "+7 (999) 111-22-33" };
     assert.equal((await api("/api/admin/settings", { method: "PUT", body: { values, expectedVersion: 0 } })).status, 200);
     assert.equal((await api("/api/site")).data.siteSettings.admissionPhone, values.admissionPhone);
+    const nationalValues = { ...values, admissionPhone: "8 (999) 111-22-33" };
+    assert.equal((await api("/api/admin/settings", { method: "PUT", body: { values: nationalValues, expectedVersion: 1 } })).status, 200);
+    assert.equal(phoneHref((await api("/api/site")).data.siteSettings.admissionPhone), "tel:+79991112233");
     assert.equal((await api("/api/admin/settings", { method: "PUT", body: {
-      values: { ...values, generalEmail: "некорректно" }, expectedVersion: 1,
+      values: { ...values, generalEmail: "некорректно" }, expectedVersion: 2,
+    } })).status, 400);
+    assert.equal((await api("/api/admin/settings", { method: "PUT", body: {
+      values: { ...values, generalPhone: "12345" }, expectedVersion: 2,
     } })).status, 400);
     const overview = (await api("/api/admin/overview")).data;
     assert.equal(overview.programCount, 10);
     assert.equal(overview.mediaCount, 1);
-    assert.equal(overview.draftCount, 0);
+    assert.equal(overview.draftCount, 1, "Восстановленный черновик остаётся в очереди редактора");
     const pending = await api("/api/admin/entry", { method: "PUT", body: {
       kind: "news", title: "Новость для проверки очереди", html: "<p>Проверка</p>",
       status: "draft", expectedVersion: 0,
     } });
     assert.equal(pending.status, 200);
     const queue = (await api("/api/admin/overview")).data;
-    assert.equal(queue.draftCount, 1);
+    assert.equal(queue.draftCount, 2);
     assert.equal(queue.drafts[0].key, pending.data.key);
 
     const users = await api("/api/admin/users", { method: "POST", body: { username: "writer", name: "Редактор", role: "editor", password: "writer-password-123" } });

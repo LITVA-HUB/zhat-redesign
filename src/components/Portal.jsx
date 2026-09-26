@@ -18,6 +18,7 @@ import "./portal.css";
 import sourceHealth from "../source-health.json";
 import { sectionGuides } from "../section-guides";
 import { useSiteData } from "../site-data";
+import { phoneHref } from "../phone";
 export function usePortalRoute() {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
@@ -309,6 +310,7 @@ function Search() {
   );
 }
 function Feedback() {
+  const { siteSettings } = useSiteData();
   const review = content.pages.find(
     (p) => p.title === "Оставить отзыв об организации",
   );
@@ -339,17 +341,17 @@ function Feedback() {
             <p>Оценка работы образовательной организации.</p>
           </a>
         )}
-        <a href="mailto:mo_zhat@mosreg.ru">
+        <a href={`mailto:${siteSettings.generalEmail}`}>
           <ArrowUpRight />
           <h3>Написать письмо</h3>
-          <p>mo_zhat@mosreg.ru</p>
+          <p>{siteSettings.generalEmail}</p>
         </a>
       </div>
       <div className="portal-contact">
         <h3>Позвонить в техникум</h3>
-        <a href="tel:+79161970205">+7 (916) 197-02-05</a>
+        <a href={phoneHref(siteSettings.generalPhone)}>{siteSettings.generalPhone}</a>
         <p>
-          Приёмная комиссия: <a href="tel:+79260760893">+7 (926) 076-08-93</a>
+          Приёмная комиссия: <a href={phoneHref(siteSettings.admissionPhone)}>{siteSettings.admissionPhone}</a>
         </p>
         <a href={pageHref("/worktime")}>Время работы →</a>
       </div>

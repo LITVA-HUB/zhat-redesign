@@ -9,7 +9,7 @@ import { ExternalLink } from "./Dialog";
 import { Brand } from "./Header";
 import { news, official } from "../data";
 import { useSiteData } from "../site-data";
-const tel = (number) => "tel:+" + number.replace(/\D/g, "");
+import { phoneHref } from "../phone";
 export function Life() {
   return (
     <section className="life" id="life">
@@ -110,7 +110,7 @@ export function Footer({ open }) {
           </div>
           <div className="contact-details">
             <h3>Приёмная комиссия</h3>
-            <a className="big-phone" href={tel(siteSettings.admissionPhone)}>
+            <a className="big-phone" href={phoneHref(siteSettings.admissionPhone)}>
               {siteSettings.admissionPhone}
             </a>
             <p>{siteSettings.admissionAddress}</p>
@@ -136,7 +136,7 @@ export function Footer({ open }) {
           <div>
             <h3>Всегда на связи</h3>
             <a href={`mailto:${siteSettings.generalEmail}`}>{siteSettings.generalEmail}</a>
-            <a href={tel(siteSettings.generalPhone)}>{siteSettings.generalPhone}</a>
+            <a href={phoneHref(siteSettings.generalPhone)}>{siteSettings.generalPhone}</a>
             <ExternalLink href="https://vk.com/zhatofficial_professionalitet">
               Сообщество ВКонтакте <ArrowUpRight size={16} />
             </ExternalLink>
@@ -144,7 +144,7 @@ export function Footer({ open }) {
           <div>
             <h3>Филиал в Раменском</h3>
             <p>{siteSettings.branchAddress}</p>
-            <a href={tel(siteSettings.branchPhone)}>{siteSettings.branchPhone}</a>
+            <a href={phoneHref(siteSettings.branchPhone)}>{siteSettings.branchPhone}</a>
           </div>
           <div>
             <h3>Официальная информация</h3>

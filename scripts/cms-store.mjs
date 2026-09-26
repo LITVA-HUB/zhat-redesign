@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { cleanEditorHtml, plainText } from "./cms-html.mjs";
 import { programs as basePrograms, categories, siteSettings as baseSiteSettings } from "../src/data.js";
+import { isValidPhone } from "../src/phone.js";
 
 export class CmsError extends Error {
   constructor(status, message) {
@@ -105,6 +106,35 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     "INSERT INTO settings(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
   ).run(name, JSON.stringify(value));
   const payload = (row) => row?.draft ? parse(row.draft) : row?.published ? parse(row.published) : null;
+  const syncPageMenu = (key, previous, next, custom) => {
+    const groups = structuredClone(menu());
+    let changed = false;
+    if (next && next.title !== previous?.title) {
+      for (const section of groups) for (const link of section.links) {
+        if (link.key === key && link.title === previous?.title) {
+          link.title = next.title;
+          changed = true;
+        }
+      }
+    }
+    if (custom) {
+      const listed = groups.some((section) => section.links.some((link) => link.key === key));
+      if (!next && listed || next && (
+        next.group !== (previous?.group || "") || next.group && !listed
+      )) {
+        let link;
+        for (const section of groups) {
+          const found = section.links.find((item) => item.key === key);
+          if (found) link ||= found;
+          section.links = section.links.filter((item) => item.key !== key);
+        }
+        const target = groups.find((section) => section.title === next?.group);
+        if (target) target.links.push(link || { key, title: next.title, url: key });
+        changed = true;
+      }
+    }
+    if (changed) saveSetting("menu", groups);
+  };
 
   return {
     db,
@@ -144,6 +174,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     site() {
       const rows = allEntries();
       const hiddenKeys = rows.filter((r) => r.archived).map((r) => r.key);
+      const hidden = new Set(hiddenKeys);
       const overrides = rows.filter((r) => !r.archived && r.published).map((r) => {
         const p = parse(r.published);
         return { key: r.key, kind: r.kind, title: p.title, summary: p.summary,
@@ -155,7 +186,9 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         ...overrides.filter((p) => p.kind === "news"),
       ];
       news.sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""));
-      return { groups: menu(), news, overrides, hiddenKeys,
+      return { groups: menu().map((group) => ({
+        ...group, links: group.links.filter((link) => !hidden.has(link.key)),
+      })), news, overrides, hiddenKeys,
         programs: this.programs().items.filter((item) => item.visible),
         siteSettings: this.siteSettings().values, updatedAt: now() };
     },
@@ -231,26 +264,8 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         draft=excluded.draft,archived=excluded.archived,version=excluded.version,updated_at=excluded.updated_at,author_id=excluded.author_id`)
         .run(key, kind, next.sourceUrl, published, draft, Number(status === "archived"),
           (row?.version || 0) + 1, row?.created_at || stamp, stamp, userId);
-      if (kind === "page" && status === "published" && next.title !== (payload(row)?.title || base?.title || "")) {
-        const groups = structuredClone(menu());
-        let updated = false;
-        for (const section of groups) for (const link of section.links) {
-          if (link.key === key && link.title === (payload(row)?.title || base?.title)) {
-            link.title = next.title; updated = true;
-          }
-        }
-        if (updated) db.prepare("INSERT INTO settings(name,value) VALUES('menu',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value")
-          .run(JSON.stringify(groups));
-      }
-      if (kind === "page" && next.group && status === "published" && !base && !menu().some((g) => g.links.some((l) => l.key === key))) {
-        const groups = structuredClone(menu());
-        const target = groups.find((g) => g.title === next.group);
-        if (target) {
-          target.links.push({ key, title: next.title, url: key });
-          db.prepare("INSERT INTO settings(name,value) VALUES('menu',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value")
-            .run(JSON.stringify(groups));
-        }
-      }
+      if (kind === "page" && status === "published")
+        syncPageMenu(key, row?.published ? parse(row.published) : base, next, !base);
       auditAction(userId, status, next.title);
       return this.editable(key);
     },
@@ -268,6 +283,11 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       const state = parse(revision.state);
       db.prepare("UPDATE entries SET published=?,draft=?,archived=?,version=?,updated_at=?,author_id=? WHERE key=?")
         .run(state.published, state.draft, state.archived, row.version + 1, stamp, userId, key);
+      if (row.kind === "page") {
+        const base = baseline(key);
+        syncPageMenu(key, row.published ? parse(row.published) : base,
+          state.published ? parse(state.published) : base, !base);
+      }
       auditAction(userId, "restore", payload(row)?.title || key);
       return this.editable(key);
     },
@@ -327,8 +347,8 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         if (typeof value !== "string" || !value.trim() || value.length > (key === "heroLead" ? 300 : 180))
           throw new CmsError(400, `Проверьте поле «${key}»`);
         normalized[key] = value.trim();
-        if (key.endsWith("Phone") && normalized[key].replace(/\D/g, "").length < 10)
-          throw new CmsError(400, "Укажите полный номер телефона");
+        if (key.endsWith("Phone") && !isValidPhone(normalized[key]))
+          throw new CmsError(400, "Укажите российский номер: +7, 8 или десять цифр");
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.generalEmail))
         throw new CmsError(400, "Проверьте адрес электронной почты");

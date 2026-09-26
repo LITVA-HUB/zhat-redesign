@@ -174,7 +174,7 @@ function Entries({ api, kind }) {
   </>;
 }
 
-function RichEditor({ html, onChange, editorRef, onInsertFile }) {
+function RichEditor({ html, onChange, editorRef, onInsertFile, disabled = false }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   useEffect(() => {
@@ -189,15 +189,15 @@ function RichEditor({ html, onChange, editorRef, onInsertFile }) {
   };
   return <div className="admin-rich">
     <div className="admin-toolbar" aria-label="Форматирование текста">
-      <button type="button" title="Жирный" onMouseDown={(e) => e.preventDefault()} onClick={() => format("bold")}><strong>Ж</strong></button>
-      <button type="button" title="Курсив" onMouseDown={(e) => e.preventDefault()} onClick={() => format("italic")}><em>К</em></button>
-      <button type="button" title="Список" onMouseDown={(e) => e.preventDefault()} onClick={() => format("insertUnorderedList")}><List size={19} /></button>
-      <button type="button" title="Нумерованный список" onMouseDown={(e) => e.preventDefault()} onClick={() => format("insertOrderedList")}>1.</button>
-      <button type="button" title="Ссылка" onMouseDown={(e) => e.preventDefault()} onClick={() => setLinkOpen(!linkOpen)}><LinkSimple size={19} /></button>
-      <button type="button" className="admin-toolbar-file" onClick={onInsertFile}><UploadSimple size={19} /> Вставить файл или фото</button>
+      <button type="button" title="Жирный" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => format("bold")}><strong>Ж</strong></button>
+      <button type="button" title="Курсив" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => format("italic")}><em>К</em></button>
+      <button type="button" title="Список" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => format("insertUnorderedList")}><List size={19} /></button>
+      <button type="button" title="Нумерованный список" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => format("insertOrderedList")}>1.</button>
+      <button type="button" title="Ссылка" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => setLinkOpen(!linkOpen)}><LinkSimple size={19} /></button>
+      <button type="button" className="admin-toolbar-file" disabled={disabled} onClick={onInsertFile}><UploadSimple size={19} /> Вставить файл или фото</button>
     </div>
-    {linkOpen && <div className="admin-link-form"><input type="text" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" aria-label="Адрес ссылки" /><button type="button" onClick={insertLink}>Вставить ссылку</button></div>}
-    <div ref={editorRef} role="textbox" aria-label="Текст материала" aria-multiline="true" contentEditable suppressContentEditableWarning className="admin-editable imported-content" onInput={(e) => onChange(e.currentTarget.innerHTML)} onPaste={(event) => { event.preventDefault(); const text = event.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text); }} />
+    {linkOpen && <div className="admin-link-form"><input type="text" disabled={disabled} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" aria-label="Адрес ссылки" /><button type="button" disabled={disabled} onClick={insertLink}>Вставить ссылку</button></div>}
+    <div ref={editorRef} role="textbox" aria-label="Текст материала" aria-multiline="true" aria-readonly={disabled} contentEditable={!disabled} suppressContentEditableWarning className="admin-editable imported-content" onInput={(e) => onChange(e.currentTarget.innerHTML)} onPaste={(event) => { event.preventDefault(); const text = event.clipboardData.getData("text/plain"); document.execCommand("insertText", false, text); }} />
     <p className="admin-hint">Выделите текст, чтобы сделать его жирным или добавить ссылку. При вставке из Word сохранится текст без лишнего оформления.</p>
   </div>;
 }
@@ -240,6 +240,7 @@ function Editor({ api, entryKey, kind = "news", refresh }) {
     return () => { active = false; };
   }, [entryKey, kind, api]);
   const save = async (status) => {
+    if (busy) return;
     setError(""); setMessage(""); setBusy(true);
     try {
       const result = await api("/api/admin/entry", { method: "PUT", body: {
@@ -258,12 +259,15 @@ function Editor({ api, entryKey, kind = "news", refresh }) {
     catch (cause) { setError(cause.message); }
   };
   const restore = async (id) => {
+    if (busy) return;
+    setBusy(true);
     try {
       const result = await api("/api/admin/restore", { method: "POST", body: { key: entry.key, revisionId: id } });
       setEntry(result); setTitle(result.title); setSummary(result.summary); setHtml(result.html); setImage(result.image); setGroup(result.group || "");
       if (editorRef.current) editorRef.current.innerHTML = result.html || "";
       setMessage("Версия восстановлена."); setRevisions(null); window.dispatchEvent(new Event("zhat:site-updated"));
     } catch (cause) { setError(cause.message); }
+    finally { setBusy(false); }
   };
   const insertFile = (file, asCover = false) => {
     if (asCover) setImage(file.url);
@@ -281,18 +285,18 @@ function Editor({ api, entryKey, kind = "news", refresh }) {
     <SectionHeading title={entry.key ? currentKind === "news" ? "Редактировать новость" : "Редактировать страницу" : currentKind === "news" ? "Новая новость" : "Новая страница"} description="Напишите текст и проверьте его. Черновик можно сохранить без публикации." />
     <div className="admin-editor-layout">
       <div className="admin-panel admin-edit-form">
-        <label>Название <span>*</span><input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={220} placeholder={currentKind === "news" ? "Например, День открытых дверей" : "Название раздела"} /></label>
-        <label>Короткое описание<input value={summary} onChange={(e) => setSummary(e.target.value)} maxLength={800} placeholder="Одно предложение о главном" /><small>Показывается в поиске и помогает посетителям понять материал.</small></label>
-        {currentKind === "page" && !entry.sourceUrl && <label>Раздел сайта<select value={group} onChange={(e) => setGroup(e.target.value)}><option value="">Без раздела</option>{groups.map((g) => <option key={g.title}>{g.title}</option>)}</select><small>Новая страница появится в выбранном разделе после публикации.</small></label>}
+        <label>Название <span>*</span><input value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} maxLength={220} placeholder={currentKind === "news" ? "Например, День открытых дверей" : "Название раздела"} /></label>
+        <label>Короткое описание<input value={summary} disabled={busy} onChange={(e) => setSummary(e.target.value)} maxLength={800} placeholder="Одно предложение о главном" /><small>Показывается в поиске и помогает посетителям понять материал.</small></label>
+        {currentKind === "page" && !entry.sourceUrl && <label>Раздел сайта<select value={group} disabled={busy} onChange={(e) => setGroup(e.target.value)}><option value="">Без раздела</option>{groups.map((g) => <option key={g.title}>{g.title}</option>)}</select><small>Новая страница появится в выбранном разделе после публикации.</small></label>}
         <label className="admin-editor-label">Текст материала <span>*</span></label>
-        <RichEditor html={html} onChange={setHtml} editorRef={editorRef} onInsertFile={() => setPicker("body")} />
+        <RichEditor html={html} onChange={setHtml} editorRef={editorRef} onInsertFile={() => setPicker("body")} disabled={busy} />
         {error && <p role="alert" className="admin-error">{error}</p>}
         {message && <p role="status" className="admin-success"><Check size={20} />{message}</p>}
       </div>
       <aside className="admin-editor-side">
         <div className="admin-panel"><h2>Публикация</h2><p className="admin-status-line">Сейчас: <span className={`admin-status ${entry.status}`}>{({ draft: "Черновик", published: "На сайте", archived: "Скрыто" })[entry.status]}</span></p><button disabled={busy || !title.trim() || !html.trim()} className="admin-primary" onClick={() => save("published")}><Check size={20} /> Опубликовать</button><button disabled={busy || !title.trim()} className="admin-secondary" onClick={() => save("draft")}><FloppyDisk size={20} /> Сохранить черновик</button><button className="admin-secondary" onClick={() => setPreview(true)}><ArrowUpRight size={20} /> Предпросмотр</button>{entry.key && entry.hasPublished && <a className="admin-secondary" href={`#/page/${encodeURIComponent(entry.key)}`} target="_blank" rel="noopener noreferrer">Посмотреть на сайте <ArrowUpRight /></a>}</div>
-        {currentKind === "news" && <div className="admin-panel"><h2>Главное фото</h2>{image ? <img className="admin-cover-preview" src={image} alt="Обложка материала" /> : <p>У новости может быть фотография. Её увидят на главной.</p>}<button className="admin-secondary" onClick={() => setPicker("cover")}><Image size={20} /> {image ? "Заменить фото" : "Добавить фото"}</button>{image && <button className="admin-quiet" onClick={() => setImage("")}>Убрать фото</button>}</div>}
-        {entry.key && <div className="admin-panel"><h2>История и адрес</h2><p className="admin-url">{entry.key}</p><button className="admin-secondary" onClick={openHistory}><ClockCounterClockwise size={20} /> Предыдущие версии</button>{revisions && <div className="admin-revisions">{revisions.length ? revisions.map((version) => <button key={version.id} onClick={() => restore(version.id)}>{displayDate(version.created_at)} <ArrowRight size={16} /></button>) : <p>Предыдущих версий пока нет.</p>}</div>}{entry.status !== "archived" && <button className="admin-quiet" onClick={() => save("archived")}>Скрыть с сайта</button>}</div>}
+        {currentKind === "news" && <div className="admin-panel"><h2>Главное фото</h2>{image ? <img className="admin-cover-preview" src={image} alt="Обложка материала" /> : <p>У новости может быть фотография. Её увидят на главной.</p>}<button className="admin-secondary" disabled={busy} onClick={() => setPicker("cover")}><Image size={20} /> {image ? "Заменить фото" : "Добавить фото"}</button>{image && <button className="admin-quiet" disabled={busy} onClick={() => setImage("")}>Убрать фото</button>}</div>}
+        {entry.key && <div className="admin-panel"><h2>История и адрес</h2><p className="admin-url">{entry.key}</p><button className="admin-secondary" onClick={openHistory}><ClockCounterClockwise size={20} /> Предыдущие версии</button>{revisions && <div className="admin-revisions">{revisions.length ? revisions.map((version) => <button key={version.id} disabled={busy} onClick={() => restore(version.id)}>{displayDate(version.created_at)} <ArrowRight size={16} /></button>) : <p>Предыдущих версий пока нет.</p>}</div>}{entry.status !== "archived" && <button className="admin-quiet" disabled={busy} onClick={() => save("archived")}>Скрыть с сайта</button>}</div>}
       </aside>
     </div>
     {picker && <MediaPicker api={api} defaultCover={picker === "cover"} onClose={() => setPicker(false)} onChoose={insertFile} />}
