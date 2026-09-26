@@ -6,7 +6,9 @@ import {
   UsersThree,
   Users,
 } from "@phosphor-icons/react";
+import { useSiteData } from "../site-data";
 export function Hero({ open }) {
+  const { siteSettings } = useSiteData();
   const audiences = [
     [
       "admission",
@@ -34,11 +36,7 @@ export function Hero({ open }) {
             <br />
             <span>высоту.</span>
           </h1>
-          <p>
-            Авиация, технологии и твои большие планы.
-            <br className="desktop-break" /> Начни свой путь в техникуме имени
-            В. А. Казакова.
-          </p>
+          <p>{siteSettings.heroLead}</p>
           <div className="hero-actions">
             <a className="button primary" href="#programs">
               Выбрать специальность <ArrowUpRight size={21} />
@@ -49,7 +47,7 @@ export function Hero({ open }) {
           </div>
         </div>
         <div className="hero-location">
-          <MapPin size={18} weight="fill" /> Жуковский · Раменское
+          <MapPin size={18} weight="fill" /> {siteSettings.location}
         </div>
       </section>
       <section className="audiences wrap" aria-label="Быстрый переход">

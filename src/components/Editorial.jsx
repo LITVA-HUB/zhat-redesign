@@ -8,6 +8,8 @@ import {
 import { ExternalLink } from "./Dialog";
 import { Brand } from "./Header";
 import { news, official } from "../data";
+import { useSiteData } from "../site-data";
+const tel = (number) => "tel:+" + number.replace(/\D/g, "");
 export function Life() {
   return (
     <section className="life" id="life">
@@ -88,6 +90,7 @@ export function News() {
   );
 }
 export function Footer({ open }) {
+  const { siteSettings } = useSiteData();
   return (
     <>
       <section className="contact-section" id="contacts">
@@ -107,10 +110,10 @@ export function Footer({ open }) {
           </div>
           <div className="contact-details">
             <h3>Приёмная комиссия</h3>
-            <a className="big-phone" href="tel:+79260760893">
-              +7 (926) 076-08-93
+            <a className="big-phone" href={tel(siteSettings.admissionPhone)}>
+              {siteSettings.admissionPhone}
             </a>
-            <p>Жуковский, ул. Кирова, 3, корпус 4</p>
+            <p>{siteSettings.admissionAddress}</p>
             <ExternalLink
               href="https://yandex.ru/maps/-/CBRka6u62D"
               className="text-link"
@@ -132,16 +135,16 @@ export function Footer({ open }) {
           </div>
           <div>
             <h3>Всегда на связи</h3>
-            <a href="mailto:mo_zhat@mosreg.ru">mo_zhat@mosreg.ru</a>
-            <a href="tel:+79161970205">+7 (916) 197-02-05</a>
+            <a href={`mailto:${siteSettings.generalEmail}`}>{siteSettings.generalEmail}</a>
+            <a href={tel(siteSettings.generalPhone)}>{siteSettings.generalPhone}</a>
             <ExternalLink href="https://vk.com/zhatofficial_professionalitet">
               Сообщество ВКонтакте <ArrowUpRight size={16} />
             </ExternalLink>
           </div>
           <div>
             <h3>Филиал в Раменском</h3>
-            <p>ул. Михалевича, 58</p>
-            <a href="tel:+79166916860">+7 (916) 691-68-60</a>
+            <p>{siteSettings.branchAddress}</p>
+            <a href={tel(siteSettings.branchPhone)}>{siteSettings.branchPhone}</a>
           </div>
           <div>
             <h3>Официальная информация</h3>

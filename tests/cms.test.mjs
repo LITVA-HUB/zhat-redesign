@@ -100,8 +100,57 @@ test("редактор: вход, черновик, публикация, пра
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
     const media = await api("/api/admin/media", { method: "POST", body: png, headers: { "Content-Type": "image/png", "X-File-Name": encodeURIComponent("фото.png") } });
     assert.equal(media.status, 201);
+    assert.ok(media.data.uploadedAt, "Загруженный файл сразу показывает дату");
     assert.equal((await fetch(base + media.data.url)).status, 200);
     assert.equal((await api("/api/admin/media", { method: "POST", body: Buffer.from("<svg/>"), headers: { "Content-Type": "image/png", "X-File-Name": "fake.png" } })).status, 415);
+
+    const basePrograms = (await api("/api/admin/programs")).data;
+    assert.equal(basePrograms.items.length, 11);
+    assert.equal(new Set(basePrograms.items.map((item) => item.image)).size, 11, "У каждого направления отдельное фото");
+    for (const program of basePrograms.items) {
+      const image = await readFile(join(root, "public", program.image.slice(1)));
+      assert.ok(image.length > 100000, `Фото ${program.code} должно существовать в проекте`);
+    }
+    const changedPrograms = structuredClone(basePrograms.items);
+    changedPrograms[0].image = media.data.url;
+    changedPrograms[0].title = "Обновлённое направление";
+    changedPrograms[1].visible = false;
+    changedPrograms.reverse();
+    assert.equal((await api("/api/admin/programs", { method: "PUT", body: {
+      items: changedPrograms, expectedVersion: 0,
+    } })).status, 200);
+    const publicPrograms = (await api("/api/site")).data.programs;
+    assert.equal(publicPrograms[0].code, changedPrograms[0].code, "Порядок специальностей попадает на сайт");
+    assert.equal(publicPrograms.length, 10, "Скрытое направление не публикуется");
+    assert.equal(publicPrograms.find((item) => item.title === "Обновлённое направление").image, media.data.url);
+    assert.equal((await api("/api/admin/programs", { method: "PUT", body: {
+      items: changedPrograms, expectedVersion: 0,
+    } })).status, 409, "Нельзя перезаписать изменения другого сотрудника");
+    const unsafePrograms = structuredClone(changedPrograms);
+    unsafePrograms[0].image = "javascript:alert(1)";
+    assert.equal((await api("/api/admin/programs", { method: "PUT", body: {
+      items: unsafePrograms, expectedVersion: 1,
+    } })).status, 400);
+    const settings = (await api("/api/admin/settings")).data;
+    assert.match(settings.values.admissionPhone, /926/);
+    const values = { ...settings.values, admissionPhone: "+7 (999) 111-22-33" };
+    assert.equal((await api("/api/admin/settings", { method: "PUT", body: { values, expectedVersion: 0 } })).status, 200);
+    assert.equal((await api("/api/site")).data.siteSettings.admissionPhone, values.admissionPhone);
+    assert.equal((await api("/api/admin/settings", { method: "PUT", body: {
+      values: { ...values, generalEmail: "некорректно" }, expectedVersion: 1,
+    } })).status, 400);
+    const overview = (await api("/api/admin/overview")).data;
+    assert.equal(overview.programCount, 10);
+    assert.equal(overview.mediaCount, 1);
+    assert.equal(overview.draftCount, 0);
+    const pending = await api("/api/admin/entry", { method: "PUT", body: {
+      kind: "news", title: "Новость для проверки очереди", html: "<p>Проверка</p>",
+      status: "draft", expectedVersion: 0,
+    } });
+    assert.equal(pending.status, 200);
+    const queue = (await api("/api/admin/overview")).data;
+    assert.equal(queue.draftCount, 1);
+    assert.equal(queue.drafts[0].key, pending.data.key);
 
     const users = await api("/api/admin/users", { method: "POST", body: { username: "writer", name: "Редактор", role: "editor", password: "writer-password-123" } });
     assert.equal(users.status, 201);
@@ -109,6 +158,8 @@ test("редактор: вход, черновик, публикация, пра
     const login = await api("/api/admin/login", { method: "POST", body: { username: "writer", password: "writer-password-123" }, withAuth: false });
     cookie = login.cookie.split(";")[0]; csrf = login.data.csrf;
     assert.equal((await api("/api/admin/menu", { method: "PUT", body: { groups: catalogue.groups } })).status, 403);
+    assert.equal((await api("/api/admin/programs", { method: "PUT", body: { items: changedPrograms, expectedVersion: 1 } })).status, 403);
+    assert.equal((await api("/api/admin/settings", { method: "PUT", body: { values, expectedVersion: 1 } })).status, 403);
     assert.equal((await api("/api/admin/entry", { method: "PUT", body: { kind: "news", title: "Редактор пишет", status: "draft", expectedVersion: 0 } })).status, 200);
     assert.equal((await api("/api/admin/logout", { method: "POST" })).status, 200);
     assert.equal((await api("/api/admin/me")).status, 401);

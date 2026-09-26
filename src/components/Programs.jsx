@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ArrowRight, ArrowUpRight } from "@phosphor-icons/react";
-import { programs, categories } from "../data";
+import { categories } from "../data";
+import { useSiteData } from "../site-data";
 export function Programs({ onSelect }) {
+  const { programs } = useSiteData();
   const [category, setCategory] = useState("Все направления");
   const [expanded, setExpanded] = useState(false);
   const filtered = programs.filter(
@@ -53,7 +55,7 @@ export function Programs({ onSelect }) {
             aria-label={`Подробнее: ${p.title}`}
           >
             <div className="program-photo">
-              <img src={`/images/${p.image}.webp`} alt="" loading="lazy" />
+              <img src={p.image} alt="" loading="lazy" />
               <span className="photo-overlay">
                 Узнать о специальности <ArrowUpRight size={22} />
               </span>

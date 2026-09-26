@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import base from "./content.json";
+import { programs as basePrograms, siteSettings as baseSiteSettings } from "./data";
 
 const SiteContext = createContext(null);
 
@@ -27,6 +28,8 @@ export function SiteProvider({ children }) {
     return {
       groups: live?.groups || base.groups,
       news: live?.news || base.news,
+      programs: live?.programs || basePrograms,
+      siteSettings: live?.siteSettings || baseSiteSettings,
       pages: [...pages.values()].filter((item) => !hidden.has(item.key)),
       overrides: new Map(overrides.map((item) => [item.key, item])),
       hidden,

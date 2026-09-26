@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, CaretDown, Check, ClockCounterClockwise,
   FileText, FloppyDisk, House, Image, LinkSimple, List, MagnifyingGlass,
-  Newspaper, Plus, SignOut, UploadSimple, Users, X,
+  Newspaper, Plus, SignOut, UploadSimple, Users, X, GraduationCap, GearSix,
 } from "@phosphor-icons/react";
 import { Brand } from "./Header";
 import { useSiteData } from "../site-data";
+import { ProgramsManager, SettingsManager } from "./AdminManagers";
 import "./admin.css";
 
 const adminLink = (section = "overview") => `#/admin/${section}`;
@@ -58,7 +59,8 @@ function Login({ onSignedIn }) {
 
 const navItems = [
   ["overview", "Обзор", House], ["news", "Новости", Newspaper], ["pages", "Страницы", FileText],
-  ["media", "Файлы и фото", Image], ["menu", "Меню сайта", List], ["users", "Сотрудники", Users],
+  ["media", "Файлы и фото", Image], ["programs", "Направления", GraduationCap],
+  ["settings", "Главная и контакты", GearSix], ["menu", "Меню сайта", List], ["users", "Сотрудники", Users],
 ];
 
 export function AdminApp({ route }) {
@@ -95,25 +97,29 @@ export function AdminApp({ route }) {
   if (section === "edit") {
     try { key = decodeURIComponent(route.slice("#/admin/edit/".length)); } catch { key = ""; }
   }
-  const visibleNav = navItems.filter(([id]) => auth.user.role === "admin" || !["menu", "users"].includes(id));
+  const visibleNav = navItems.filter(([id]) => auth.user.role === "admin" || !["menu", "users", "programs", "settings"].includes(id));
+  const navLabel = navItems.find(([id]) => id === section)?.[1] || (section === "edit" ? "Редактирование" : "Новый материал");
   const navigate = (id) => { setMobileMenu(false); location.hash = adminLink(id); };
   return <div className="admin-shell">
     <button className="admin-mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-expanded={mobileMenu} aria-label="Меню редактора">{mobileMenu ? <X /> : <List />} Меню</button>
     <aside className={`admin-sidebar ${mobileMenu ? "open" : ""}`}>
       <Brand />
-      <p className="admin-sidebar-title">Редактор сайта</p>
-      <nav aria-label="Редактор сайта">{visibleNav.map(([id, label, Icon]) => <a key={id} className={section === id ? "current" : ""} href={adminLink(id)} onClick={() => setMobileMenu(false)}><Icon size={22} />{label}</a>)}</nav>
+      <p className="admin-sidebar-title">Панель управления</p>
+      <nav aria-label="Редактор сайта">{visibleNav.map(([id, label, Icon], index) => <div key={id}>{(id === "overview" || id === "news" || id === "programs" || id === "users") && <span className="admin-nav-label">{({ overview: "РАБОЧИЙ СТОЛ", news: "ПУБЛИКАЦИИ", programs: "САЙТ", users: "ДОСТУП" })[id]}</span>}<a className={section === id ? "current" : ""} href={adminLink(id)} onClick={() => setMobileMenu(false)}><Icon size={21} />{label}</a></div>)}</nav>
       <div className="admin-sidebar-bottom"><a href="#top" onClick={() => setMobileMenu(false)}>Открыть сайт <ArrowUpRight /></a><div><strong>{auth.user.name}</strong><span>{auth.user.role === "admin" ? "Администратор" : "Редактор"}</span></div><button onClick={logout}><SignOut size={18} /> Выйти</button></div>
     </aside>
     <main className="admin-main" id="main">
-      {section === "overview" ? <Overview api={api} navigate={navigate} /> :
+      <div className="admin-topline"><span>Редактор сайта <span aria-hidden="true">/</span> <strong>{navLabel}</strong></span><a href="#top">Смотреть сайт <ArrowUpRight size={17} /></a></div>
+      {section === "overview" ? <Overview api={api} navigate={navigate} canAdmin={auth.user.role === "admin"} user={auth.user} /> :
         section === "news" ? <Entries api={api} kind="news" /> :
         section === "pages" ? <Entries api={api} kind="page" /> :
         section === "new" ? <Editor key={route} api={api} kind={route.split("/")[3] === "page" ? "page" : "news"} refresh={refresh} /> :
         section === "edit" ? <Editor key={key} api={api} entryKey={key} refresh={refresh} /> :
         section === "media" ? <MediaLibrary api={api} /> :
+        section === "programs" && auth.user.role === "admin" ? <ProgramsManager api={api} refresh={refresh} /> :
+        section === "settings" && auth.user.role === "admin" ? <SettingsManager api={api} refresh={refresh} /> :
         section === "menu" && auth.user.role === "admin" ? <MenuManager api={api} refresh={refresh} /> :
-        section === "users" && auth.user.role === "admin" ? <Staff api={api} /> : <Overview api={api} navigate={navigate} />}
+        section === "users" && auth.user.role === "admin" ? <Staff api={api} /> : <Overview api={api} navigate={navigate} canAdmin={auth.user.role === "admin"} user={auth.user} />}
     </main>
   </div>;
 }
@@ -122,17 +128,28 @@ function SectionHeading({ title, description, action }) {
   return <header className="admin-heading"><div><h1>{title}</h1><p>{description}</p></div>{action}</header>;
 }
 
-function Overview({ api, navigate }) {
+function Overview({ api, navigate, canAdmin, user }) {
   const [data, setData] = useState(null);
   useEffect(() => { api("/api/admin/overview").then(setData).catch(() => {}); }, [api]);
   return <>
-    <SectionHeading title="Добрый день!" description="Что нужно обновить на сайте сегодня?" />
+    <SectionHeading title={`Здравствуйте, ${user?.name?.split(" ")[0] || "коллега"}!`} description="Главное о сайте — в одном месте. Выберите задачу и начните работу." />
+    <div className="admin-overview-stats">
+      <div><span>Материалы</span><strong>{data ? data.news.total + data.pages.total : "—"}</strong><small>новости и страницы</small></div>
+      <div><span>Ждут публикации</span><strong>{data?.draftCount ?? "—"}</strong><small>черновиков</small></div>
+      <div><span>Направления</span><strong>{data?.programCount ?? "—"}</strong><small>показаны на сайте</small></div>
+      <div><span>Медиатека</span><strong>{data?.mediaCount ?? "—"}</strong><small>загруженных файлов</small></div>
+    </div>
+    <div className="admin-overview-section-title"><h2>Быстрые действия</h2><span>Чем займёмся сегодня?</span></div>
     <div className="admin-quick-actions">
       <button onClick={() => navigate("new/news")}><Newspaper size={30} /><strong>Добавить новость</strong><span>Напишите текст, добавьте фото и опубликуйте.</span><ArrowRight /></button>
       <button onClick={() => navigate("pages")}><FileText size={30} /><strong>Изменить страницу</strong><span>Найдите нужный раздел и обновите информацию.</span><ArrowRight /></button>
       <button onClick={() => navigate("media")}><UploadSimple size={30} /><strong>Загрузить файл</strong><span>Фото, PDF, документ или видео для материала.</span><ArrowRight /></button>
+      {canAdmin && <button onClick={() => navigate("programs")}><GraduationCap size={30} /><strong>Направления</strong><span>Фото, описание и порядок специальностей.</span><ArrowRight /></button>}
     </div>
-    <section className="admin-panel"><h2>Недавние действия</h2>{data?.activity?.length ? <ul className="admin-activity">{data.activity.map((item, index) => <li key={index}><span>{({ published: "Опубликован материал", draft: "Сохранён черновик", archived: "Скрыт материал", restore: "Восстановлена версия", upload: "Загружен файл", menu: "Обновлено меню", setup: "Создан администратор", "user:create": "Добавлен сотрудник", "user:update": "Изменён доступ сотрудника" })[item.action] || "Изменение сайта"}: <strong>{item.subject}</strong></span><time>{displayDate(item.createdAt)}</time></li>)}</ul> : <p>Изменений пока нет. Начните с новости или страницы.</p>}</section>
+    <div className="admin-overview-bottom">
+      <section className="admin-panel"><div className="admin-panel-heading"><h2>Черновики</h2><a href={adminLink("news")}>Все материалы <ArrowUpRight size={16} /></a></div>{data?.drafts?.length ? <ul className="admin-activity">{data.drafts.map((item) => <li key={item.key}><a href={editLink(item.key)}><strong>{item.title}</strong><span>Открыть черновик ↗</span></a><time>{displayDate(item.updatedAt)}</time></li>)}</ul> : <p>Черновиков пока нет. Создайте новость и сохраните её перед публикацией.</p>}</section>
+      <section className="admin-panel"><h2>Недавние действия</h2>{data?.activity?.length ? <ul className="admin-activity">{data.activity.slice(0, 6).map((item, index) => <li key={index}><span>{({ published: "Опубликован материал", draft: "Сохранён черновик", archived: "Скрыт материал", restore: "Восстановлена версия", upload: "Загружен файл", menu: "Обновлено меню", programs: "Обновлены направления", settings: "Обновлены контакты", setup: "Создан администратор", "user:create": "Добавлен сотрудник", "user:update": "Изменён доступ сотрудника" })[item.action] || "Изменение сайта"}: <strong>{item.subject}</strong></span><time>{displayDate(item.createdAt)}</time></li>)}</ul> : <p>Изменений пока нет.</p>}</section>
+    </div>
   </>;
 }
 
@@ -307,6 +324,7 @@ function MediaPicker({ api, onClose, onChoose, defaultCover = false }) {
 
 function MediaLibrary({ api }) {
   const [items, setItems] = useState([]);
+  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -316,11 +334,20 @@ function MediaLibrary({ api }) {
     try { const item = await api("/api/admin/media", { method: "POST", body: file }); setItems([item, ...items]); setMessage("Файл загружен. Откройте материал, чтобы вставить его в текст."); }
     catch (cause) { setError(cause.message); } finally { setBusy(false); }
   };
+  const copy = async (item) => {
+    setError(""); setMessage("");
+    try {
+      await navigator.clipboard.writeText(location.origin + (item.url || `/api/site/media/${item.id}`));
+      setMessage(`Ссылка на «${item.name}» скопирована.`);
+    } catch { setError("Не удалось скопировать ссылку. Откройте файл и скопируйте его адрес из браузера."); }
+  };
+  const visible = items.filter((item) => item.name.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")));
   return <><SectionHeading title="Файлы и фото" description="Все материалы в одном месте. Документы можно вставить в страницу или новость." />
     <label className="admin-upload"><UploadSimple size={24} />{busy ? "Загружаем…" : "Выбрать файл с компьютера"}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.doc,.docx,.xlsx,video/mp4" disabled={busy} onChange={(e) => upload(e.target.files?.[0])} /></label>
     <p className="admin-hint">Изображения, PDF, Word, Excel и MP4. Максимум 25 МБ.</p>
     {error && <p role="alert" className="admin-error">{error}</p>}{message && <p role="status" className="admin-success">{message}</p>}
-    <div className="admin-media-grid standalone">{items.map((item) => <a href={item.url || `/api/site/media/${item.id}`} target="_blank" rel="noopener noreferrer" key={item.id} className="admin-media-item">{item.mime.startsWith("image/") ? <img src={item.url || `/api/site/media/${item.id}`} alt="" /> : <FileText size={40} />}<strong>{item.name}</strong><small>{Math.round(item.size / 1024)} КБ · {displayDate(item.uploadedAt)}</small></a>)}</div>
+    <label className="admin-search admin-media-search"><MagnifyingGlass size={20} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти загруженный файл" aria-label="Найти файл" /></label>
+    {visible.length ? <div className="admin-media-grid standalone">{visible.map((item) => <div key={item.id} className="admin-media-item"><a href={item.url || `/api/site/media/${item.id}`} target="_blank" rel="noopener noreferrer" aria-label={`Открыть ${item.name}`}>{item.mime.startsWith("image/") ? <img src={item.url || `/api/site/media/${item.id}`} alt="" /> : <FileText size={40} />}</a><strong>{item.name}</strong><small>{Math.round(item.size / 1024)} КБ · {displayDate(item.uploadedAt)}</small><button onClick={() => copy(item)}>Скопировать ссылку</button></div>)}</div> : <p className="admin-empty">{items.length ? "По этому запросу файлов нет." : "Файлов пока нет. Загрузите первый файл с компьютера."}</p>}
   </>;
 }
 

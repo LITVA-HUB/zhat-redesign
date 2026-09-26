@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { cleanEditorHtml, plainText } from "./cms-html.mjs";
+import { programs as basePrograms, categories, siteSettings as baseSiteSettings } from "../src/data.js";
 
 export class CmsError extends Error {
   constructor(status, message) {
@@ -99,6 +100,10 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     } : null;
   };
   const menu = () => parse(db.prepare("SELECT value FROM settings WHERE name='menu'").get()?.value) || catalogue.groups;
+  const setting = (name) => parse(db.prepare("SELECT value FROM settings WHERE name=?").get(name)?.value);
+  const saveSetting = (name, value) => db.prepare(
+    "INSERT INTO settings(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+  ).run(name, JSON.stringify(value));
   const payload = (row) => row?.draft ? parse(row.draft) : row?.published ? parse(row.published) : null;
 
   return {
@@ -150,7 +155,9 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         ...overrides.filter((p) => p.kind === "news"),
       ];
       news.sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""));
-      return { groups: menu(), news, overrides, hiddenKeys, updatedAt: now() };
+      return { groups: menu(), news, overrides, hiddenKeys,
+        programs: this.programs().items.filter((item) => item.visible),
+        siteSettings: this.siteSettings().values, updatedAt: now() };
     },
     publicEntry(key) {
       const row = getEntry(key);
@@ -265,6 +272,81 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       return this.editable(key);
     },
     menu,
+    programs() {
+      return setting("programs") || {
+        version: 0, items: basePrograms.map((program) => ({ ...program, visible: true })),
+      };
+    },
+    setPrograms(items, expectedVersion, userId) {
+      const current = this.programs();
+      if (Number(expectedVersion) !== current.version)
+        throw new CmsError(409, "Направления изменены другим сотрудником. Обновите страницу.");
+      const original = new Map(basePrograms.map((program) => [program.id, program]));
+      if (!Array.isArray(items) || items.length !== original.size ||
+          new Set(items.map((item) => item?.id)).size !== original.size ||
+          items.some((item) => !original.has(item?.id)))
+        throw new CmsError(400, "Список направлений неполный или содержит повторения");
+      const normalized = items.map((item) => {
+        const base = original.get(item.id);
+        const short = (value, limit, label) => {
+          if (typeof value !== "string" || !value.trim() || value.length > limit)
+            throw new CmsError(400, `Проверьте поле «${label}» направления ${base.code}`);
+          return value.trim();
+        };
+        if (!categories.slice(1).includes(item.category) || typeof item.visible !== "boolean")
+          throw new CmsError(400, `Проверьте категорию и видимость направления ${base.code}`);
+        const image = safeImage(item.image);
+        if (!image) throw new CmsError(400, `Добавьте фото направления ${base.code}`);
+        return {
+          id: base.id, code: base.code, url: base.url,
+          title: short(item.title, 180, "название"),
+          category: item.category,
+          duration: short(item.duration, 80, "срок обучения"),
+          funding: short(item.funding, 120, "финансирование"),
+          description: short(item.description, 500, "описание"),
+          image, visible: item.visible,
+        };
+      });
+      const next = { version: current.version + 1, items: normalized };
+      saveSetting("programs", next);
+      auditAction(userId, "programs", "направления обучения");
+      return next;
+    },
+    siteSettings() {
+      return setting("site_settings") || { version: 0, values: baseSiteSettings };
+    },
+    setSiteSettings(values, expectedVersion, userId) {
+      const current = this.siteSettings();
+      if (Number(expectedVersion) !== current.version)
+        throw new CmsError(409, "Контакты изменены другим сотрудником. Обновите страницу.");
+      if (!values || typeof values !== "object" || Array.isArray(values))
+        throw new CmsError(400, "Проверьте настройки сайта");
+      const normalized = {};
+      for (const [key, fallback] of Object.entries(baseSiteSettings)) {
+        const value = values[key];
+        if (typeof value !== "string" || !value.trim() || value.length > (key === "heroLead" ? 300 : 180))
+          throw new CmsError(400, `Проверьте поле «${key}»`);
+        normalized[key] = value.trim();
+        if (key.endsWith("Phone") && normalized[key].replace(/\D/g, "").length < 10)
+          throw new CmsError(400, "Укажите полный номер телефона");
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.generalEmail))
+        throw new CmsError(400, "Проверьте адрес электронной почты");
+      const next = { version: current.version + 1, values: normalized };
+      saveSetting("site_settings", next);
+      auditAction(userId, "settings", "контакты и первый экран");
+      return next;
+    },
+    dashboard() {
+      const drafts = allEntries().filter((row) => row.draft && !row.archived).slice(0, 5).map((row) => ({
+        key: row.key, title: parse(row.draft)?.title || row.key, updatedAt: row.updated_at,
+      }));
+      return {
+        drafts, draftCount: db.prepare("SELECT count(*) AS n FROM entries WHERE draft IS NOT NULL AND archived=0").get().n,
+        mediaCount: db.prepare("SELECT count(*) AS n FROM media").get().n,
+        programCount: this.programs().items.filter((item) => item.visible).length,
+      };
+    },
     setMenu(groups, userId) {
       if (!Array.isArray(groups) || groups.length !== 6 || groups.some((g) =>
         !catalogue.groups.some((base) => base.title === g.title) || !Array.isArray(g.links))) throw new CmsError(400, "Структура меню некорректна");
@@ -279,10 +361,11 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     },
     media() { return db.prepare("SELECT id,name,mime,size,uploaded_at AS uploadedAt FROM media ORDER BY uploaded_at DESC").all(); },
     addMedia(item, userId) {
+      const uploadedAt = now();
       db.prepare("INSERT INTO media(id,name,filename,mime,size,uploaded_at,author_id) VALUES(?,?,?,?,?,?,?)")
-        .run(item.id, item.name, item.filename, item.mime, item.size, now(), userId);
+        .run(item.id, item.name, item.filename, item.mime, item.size, uploadedAt, userId);
       auditAction(userId, "upload", item.name);
-      return { ...item, url: `/api/site/media/${item.id}` };
+      return { ...item, uploadedAt, url: `/api/site/media/${item.id}` };
     },
     mediaById(id) { return db.prepare("SELECT * FROM media WHERE id=?").get(id); },
     users() { return db.prepare("SELECT id,username,name,role,active FROM users ORDER BY id").all().map(publicUser); },

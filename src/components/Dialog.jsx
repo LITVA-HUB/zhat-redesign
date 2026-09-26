@@ -8,6 +8,7 @@ import {
   Check,
 } from "@phosphor-icons/react";
 import { admissionUrl, official, studentLinks } from "../data";
+import { useSiteData } from "../site-data";
 export function ExternalLink({ href, children, className = "", ...rest }) {
   const destination = localHref(href);
   const internal = destination.startsWith("#");
@@ -24,6 +25,7 @@ export function ExternalLink({ href, children, className = "", ...rest }) {
   );
 }
 export function Dialog({ content, onClose }) {
+  const { siteSettings } = useSiteData();
   const ref = useRef(null);
   useEffect(() => {
     if (!content) return;
@@ -112,8 +114,8 @@ export function Dialog({ content, onClose }) {
             <ExternalLink href={p.url} className="button primary">
               О специальности <ArrowUpRight size={20} />
             </ExternalLink>
-            <a href="tel:+79260760893" className="contact-inline">
-              <Phone size={19} /> +7 (926) 076-08-93
+            <a href={"tel:+" + siteSettings.admissionPhone.replace(/\D/g, "")} className="contact-inline">
+              <Phone size={19} /> {siteSettings.admissionPhone}
             </a>
           </>
         ) : null}

@@ -13,3 +13,6 @@ Preserve the current visual identity, implement the public functionality and sec
 
 ## User direction — 2026-09-27
 The replacement must preserve the site's public navigation and functions while adding a genuinely usable publishing system. Photos show Joomla 3.10.12 with article/category, menu, media, user, module and extension managers. Design daily editing around clear Russian actions for nontechnical staff: news, pages, menu, files, draft, preview and publish. Keep the old site's closed data and third-party integrations distinct from public information that has actually been imported; do not claim a completed Joomla database migration without an export or server access.
+
+## User direction — 2026-09-27, admin and programs
+Make the admin panel feel mature while remaining easy for nontechnical staff. Include practical control over program cards and the public homepage contacts, with clear navigation, saved-state feedback and role boundaries. Each of the 11 specialties needs its own realistic image; conceptual generated imagery must not be described as a documentary photo of college facilities.

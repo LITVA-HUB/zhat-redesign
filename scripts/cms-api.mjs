@@ -159,7 +159,24 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
         respond(res, 200, { ok: true }); return true;
       }
       if (path === "/api/admin/overview" && req.method === "GET") {
-        respond(res, 200, { news: store.list("news", "", 1, 5), pages: store.list("page", "", 1, 5), activity: store.activity() }); return true;
+        respond(res, 200, { news: store.list("news", "", 1, 5), pages: store.list("page", "", 1, 5),
+          ...store.dashboard(), activity: store.activity() }); return true;
+      }
+      if (path === "/api/admin/programs" && req.method === "GET") {
+        respond(res, 200, store.programs()); return true;
+      }
+      if (path === "/api/admin/programs" && req.method === "PUT") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор меняет направления");
+        const body = await jsonBody(req);
+        respond(res, 200, store.setPrograms(body.items, body.expectedVersion, user.id)); return true;
+      }
+      if (path === "/api/admin/settings" && req.method === "GET") {
+        respond(res, 200, store.siteSettings()); return true;
+      }
+      if (path === "/api/admin/settings" && req.method === "PUT") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор меняет контакты");
+        const body = await jsonBody(req);
+        respond(res, 200, store.setSiteSettings(body.values, body.expectedVersion, user.id)); return true;
       }
       if (path === "/api/admin/entries" && req.method === "GET") {
         const kind = request.searchParams.get("kind") === "news" ? "news" : "page";
