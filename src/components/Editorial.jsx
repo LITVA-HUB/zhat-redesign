@@ -159,6 +159,7 @@ export function Footer({ open }) {
             >
               Политика обработки данных
             </ExternalLink>
+            <a href="#/admin">Редактор сайта <ArrowUpRight size={16} /></a>
           </div>
         </div>
         <div className="footer-bottom">

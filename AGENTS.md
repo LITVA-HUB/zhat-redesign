@@ -10,3 +10,6 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 
 ## User direction — 2026-09-21
 Preserve the current visual identity, implement the public functionality and sections of zhat.ru as fully as available, check the site, and show real mobile screenshots. Distinguish imported public content from integrations that need the college's administrative access. Never fake form submission or automatic live data.
+
+## User direction — 2026-09-27
+The replacement must preserve the site's public navigation and functions while adding a genuinely usable publishing system. Photos show Joomla 3.10.12 with article/category, menu, media, user, module and extension managers. Design daily editing around clear Russian actions for nontechnical staff: news, pages, menu, files, draft, preview and publish. Keep the old site's closed data and third-party integrations distinct from public information that has actually been imported; do not claim a completed Joomla database migration without an export or server access.

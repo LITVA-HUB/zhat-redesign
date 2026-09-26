@@ -11,7 +11,12 @@ import {
   usePortalRoute,
 } from "./components/Portal";
 import { Dialog } from "./components/Dialog";
+import { SiteProvider } from "./site-data";
+import { AdminApp } from "./components/AdminApp";
 export function App() {
+  return <SiteProvider><SiteApp /></SiteProvider>;
+}
+function SiteApp() {
   const route = usePortalRoute();
   useEffect(() => {
     setDialog(null);
@@ -33,6 +38,7 @@ export function App() {
     } catch {}
   }, [contrast]);
   const open = (type) => setDialog({ type });
+  if (route.startsWith("#/admin")) return <AdminApp route={route} />;
   return (
     <div id="top">
       <Header open={open} contrast={contrast} setContrast={setContrast} />

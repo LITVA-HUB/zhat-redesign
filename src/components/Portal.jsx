@@ -17,6 +17,7 @@ import {
 import "./portal.css";
 import sourceHealth from "../source-health.json";
 import { sectionGuides } from "../section-guides";
+import { useSiteData } from "../site-data";
 export function usePortalRoute() {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
@@ -84,6 +85,7 @@ export function ServiceBar() {
   );
 }
 export function SectionDirectory({ compact = false }) {
+  const { groups } = useSiteData();
   const [query, setQuery] = useState("");
   const matches = (link) =>
     link.title
@@ -117,18 +119,18 @@ export function SectionDirectory({ compact = false }) {
       {!compact && (
         <p className="sync-note">
           Шесть разделов ·{" "}
-          {content.groups.reduce((sum, g) => sum + g.links.length, 0)} тем.
+          {groups.reduce((sum, g) => sum + g.links.length, 0)} тем.
           Выберите нужную или найдите по названию.
         </p>
       )}
-      {query && !content.groups.some((g) => g.links.some(matches)) && (
+      {query && !groups.some((g) => g.links.some(matches)) && (
         <p role="status" className="empty-state">
           Такого раздела нет. Попробуйте другое слово или{" "}
           <a href="#/search">поиск по всем материалам</a>.
         </p>
       )}
       <div className="directory-grid">
-        {content.groups.map(
+        {groups.map(
           (group, i) =>
             (!query || group.links.some(matches)) && (
               <details
@@ -156,8 +158,9 @@ export function SectionDirectory({ compact = false }) {
   );
 }
 export function CurrentNews({ all = false }) {
+  const { news } = useSiteData();
   const [query, setQuery] = useState("");
-  const items = content.news.filter((n) =>
+  const items = news.filter((n) =>
     n.title.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")),
   );
   return (
@@ -215,6 +218,7 @@ export function CurrentNews({ all = false }) {
   );
 }
 function Search() {
+  const { pages, overrides, hidden } = useSiteData();
   const [searchPages, setSearchPages] = useState(content.pages);
   useEffect(() => {
     const controller = new AbortController();
@@ -236,8 +240,9 @@ function Search() {
     .filter(Boolean);
   const { items: archive, error: archiveError } = useArchive();
   const candidates = [
-    ...searchPages,
-    ...archive.filter((a) => !searchPages.some((p) => p.key === a.key)),
+    ...searchPages.map((p) => overrides.get(p.key) || p).filter((p) => !hidden.has(p.key)),
+    ...pages.filter((p) => !searchPages.some((found) => found.key === p.key)),
+    ...archive.filter((a) => !hidden.has(a.key) && !searchPages.some((p) => p.key === a.key) && !pages.some((p) => p.key === a.key)),
   ];
   const matches = words.length
     ? candidates.filter((p) =>
@@ -352,10 +357,15 @@ function Feedback() {
   );
 }
 function Archive() {
+  const { news, hidden, overrides } = useSiteData();
   const [query, setQuery] = useState(""),
     [page, setPage] = useState(1);
   const { items: archive, error } = useArchive();
-  const items = archive.filter((n) =>
+  const merged = [
+    ...news.filter((n) => !archive.some((item) => item.key === n.key)),
+    ...archive.map((item) => overrides.get(item.key) || item),
+  ].filter((item) => !hidden.has(item.key)).sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""));
+  const items = merged.filter((n) =>
     n.title.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")),
   );
   const pages = Math.max(1, Math.ceil(items.length / 30));
@@ -420,23 +430,26 @@ function Archive() {
   );
 }
 function Article({ pageKey }) {
-  const stored = content.pages.find((p) => p.key === pageKey);
+  const { pages, groups, overrides, hidden } = useSiteData();
+  const stored = pages.find((p) => p.key === pageKey);
   const { items: archive, error: catalogError } = useArchive();
   const archived = archive.find((p) => p.key === pageKey);
-  const group = content.groups.find((g) => g.links[0]?.key === pageKey);
+  const group = groups.find((g) => g.links[0]?.key === pageKey);
   const [loaded, setLoaded] = useState(null),
     [error, setError] = useState(""),
     [retry, setRetry] = useState(0);
-  const entry = stored || archived;
+  const entry = hidden.has(pageKey) ? null : stored || archived;
   useEffect(() => {
-    if (!entry || (group && stored?.error)) return;
+    if (!entry || (group && stored?.error && !overrides.has(pageKey))) return;
     const controller = new AbortController();
     setError("");
     setLoaded(null);
     fetch(
-      stored && !stored.error
-        ? stored.contentFile
-        : "/api/content?key=" + encodeURIComponent(pageKey),
+      overrides.has(pageKey)
+        ? "/api/site/page?key=" + encodeURIComponent(pageKey)
+        : stored && !stored.error && stored.contentFile
+          ? stored.contentFile
+          : "/api/content?key=" + encodeURIComponent(pageKey),
       { signal: controller.signal },
     )
       .then(async (r) => {
@@ -450,7 +463,7 @@ function Article({ pageKey }) {
           setError("Не удалось загрузить материал с официального сайта.");
       });
     return () => controller.abort();
-  }, [pageKey, retry, entry]);
+  }, [pageKey, retry, entry, stored, overrides]);
   const page = loaded;
   const articleHTML = useMemo(() => {
     if (!page?.html) return "";
@@ -473,7 +486,7 @@ function Article({ pageKey }) {
     }
     return doc.body.innerHTML;
   }, [page]);
-  const section = content.groups.find((g) =>
+  const section = groups.find((g) =>
     g.links.some((l) => l.key === pageKey),
   );
   const guide = sectionGuides[pageKey];
@@ -509,7 +522,7 @@ function Article({ pageKey }) {
     }
   };
   if (pageKey === "/sitemap") return <SectionDirectory />;
-  if (!entry && !archive.length)
+  if (!entry && !archive.length && !hidden.has(pageKey))
     return (
       <p role="status" className="empty-state">
         {catalogError || "Загружаем каталог…"}
@@ -529,11 +542,13 @@ function Article({ pageKey }) {
       <div className="page-meta">
         <span>
           <CalendarBlank />
-          {stored ? "Обновлено " + syncedDate : "Материал с официального сайта"}
+          {stored?.live && stored.updatedAt
+            ? "Обновлено " + new Date(stored.updatedAt).toLocaleDateString("ru")
+            : stored ? "Обновлено " + syncedDate : "Материал с официального сайта"}
         </span>
-        <a href={entry.url} target="_blank" rel="noopener noreferrer">
+        {entry.url && <a href={entry.url} target="_blank" rel="noopener noreferrer">
           На официальном сайте <ArrowUpRight />
-        </a>
+        </a>}
       </div>
       {section && (
         <details className="section-jump">
@@ -554,7 +569,7 @@ function Article({ pageKey }) {
           </nav>
         </details>
       )}
-      {guide?.message && (
+      {guide?.message && !overrides.has(pageKey) && (
         <aside className="source-notice">
           <h2>Что доступно сейчас</h2>
           <p>{guide.message}</p>
@@ -614,7 +629,7 @@ function Article({ pageKey }) {
           )}
         </details>
       )}
-      {group && stored?.error ? (
+      {group && stored?.error && !overrides.has(pageKey) ? (
         <div className="archive-list">
           {group.links.slice(1).map((l) => (
             <a key={l.key} href={pageHref(l.key)}>

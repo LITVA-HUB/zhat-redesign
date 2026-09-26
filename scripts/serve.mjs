@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { contentApi } from "./content-api.mjs";
+import { cmsApi } from "./cms-api.mjs";
 const root = fileURLToPath(new URL("../dist/client/", import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -15,6 +16,7 @@ const mime = {
   ".woff2": "font/woff2",
 };
 createServer(async (req, res) => {
+  if (await cmsApi(req, res)) return;
   if (await contentApi(req, res)) return;
   if (!["GET", "HEAD"].includes(req.method)) {
     res.writeHead(405);
@@ -50,6 +52,6 @@ createServer(async (req, res) => {
     res.writeHead(500);
     res.end("Unable to load page");
   }
-}).listen(Number(process.env.PORT || 5176), "127.0.0.1", () =>
-  console.log("ЖАТ: http://127.0.0.1:" + (process.env.PORT || 5176)),
+}).listen(Number(process.env.PORT || 5176), process.env.HOST || "127.0.0.1", () =>
+  console.log("ЖАТ: http://" + (process.env.HOST || "127.0.0.1") + ":" + (process.env.PORT || 5176)),
 );
