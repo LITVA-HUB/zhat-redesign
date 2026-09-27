@@ -16,3 +16,6 @@ The replacement must preserve the site's public navigation and functions while a
 
 ## User direction — 2026-09-27, admin and programs
 Make the admin panel feel mature while remaining easy for nontechnical staff. Include practical control over program cards and the public homepage contacts, with clear navigation, saved-state feedback and role boundaries. Each of the 11 specialties needs its own realistic image; conceptual generated imagery must not be described as a documentary photo of college facilities.
+
+## User direction — 2026-09-27, block editing
+Staff should manage the public site by clear, understandable blocks from the admin panel. Keep homepage text, images, visibility and order editable without code, while news, pages, programs, menu and contacts remain dedicated editors. Support a real preview, protect concurrent edits and preserve unfinished local changes.

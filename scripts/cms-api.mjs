@@ -178,11 +178,29 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
         const body = await jsonBody(req);
         respond(res, 200, store.setSiteSettings(body.values, body.expectedVersion, user.id)); return true;
       }
+      if (path === "/api/admin/homepage" && req.method === "GET") {
+        respond(res, 200, store.homepage()); return true;
+      }
+      if (path === "/api/admin/homepage" && req.method === "PUT") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор меняет блоки главной");
+        const body = await jsonBody(req);
+        respond(res, 200, store.setHomepage(body.value, body.expectedVersion, user.id)); return true;
+      }
+      if (path === "/api/admin/homepage/revisions" && req.method === "GET") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор видит версии блоков");
+        respond(res, 200, { items: store.homepageRevisions() }); return true;
+      }
+      if (path === "/api/admin/homepage/restore" && req.method === "POST") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор восстанавливает блоки");
+        const body = await jsonBody(req);
+        respond(res, 200, store.restoreHomepage(Number(body.revisionId), body.expectedVersion, user.id)); return true;
+      }
       if (path === "/api/admin/entries" && req.method === "GET") {
         const kind = request.searchParams.get("kind") === "news" ? "news" : "page";
         const page = Math.max(1, Math.min(1000, Number(request.searchParams.get("page") || 1) || 1));
         const size = Math.max(1, Math.min(200, Number(request.searchParams.get("size") || 40) || 40));
-        respond(res, 200, store.list(kind, request.searchParams.get("q"), page, size)); return true;
+        respond(res, 200, store.list(kind, request.searchParams.get("q"), page, size,
+          kind === "page" && request.searchParams.get("selectable") === "1")); return true;
       }
       if (path === "/api/admin/entry" && req.method === "GET") {
         const entry = store.editable(request.searchParams.get("key"));
@@ -201,12 +219,12 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
         respond(res, 200, store.restore(body.key, Number(body.revisionId), user.id)); return true;
       }
       if (path === "/api/admin/menu" && req.method === "GET") {
-        respond(res, 200, { groups: store.menu() }); return true;
+        respond(res, 200, store.menuState()); return true;
       }
       if (path === "/api/admin/menu" && req.method === "PUT") {
         if (user.role !== "admin") throw new CmsError(403, "Только администратор меняет меню");
         const body = await jsonBody(req);
-        respond(res, 200, { groups: store.setMenu(body.groups, user.id) }); return true;
+        respond(res, 200, store.setMenu(body.groups, body.expectedVersion, user.id)); return true;
       }
       if (path === "/api/admin/media" && req.method === "GET") {
         respond(res, 200, { items: store.media() }); return true;

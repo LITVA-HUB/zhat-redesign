@@ -93,8 +93,6 @@ export function ProgramsManager({ api, refresh }) {
 }
 
 const settingFields = [
-  ["heroLead", "Текст под заголовком", "Первые слова, которые видит посетитель"],
-  ["location", "Города", "Подпись на первом экране"],
   ["admissionPhone", "Телефон приёмной комиссии", "Показывается в блоке «Как поступить»"],
   ["admissionAddress", "Адрес приёмной комиссии", "Показывается рядом с телефоном"],
   ["generalEmail", "Электронная почта", "Показывается в подвале"],
@@ -115,16 +113,16 @@ export function SettingsManager({ api, refresh }) {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     try {
       const result = await api("/api/admin/settings", { method: "PUT", body: { values: data.values, expectedVersion: data.version } });
-      setData(result); setDirty(false); setMessage("Главная страница и контакты обновлены."); await notifySite(refresh);
+      setData(result); setDirty(false); setMessage("Контакты обновлены на сайте."); await notifySite(refresh);
     } catch (cause) { setError(cause.message); }
     finally { setBusy(false); }
   };
   return <>
-    <header className="admin-heading"><div><span className="admin-eyebrow">ИНФОРМАЦИЯ</span><h1>Главная и контакты</h1><p>Держите телефоны, адреса и текст первого экрана актуальными. Изменения сразу появятся на сайте.</p></div><a className="admin-secondary" href="#top" target="_blank" rel="noopener noreferrer">Открыть сайт</a></header>
+    <header className="admin-heading"><div><span className="admin-eyebrow">ИНФОРМАЦИЯ</span><h1>Контакты</h1><p>Обновляйте телефоны, адреса и почту. Текст и фото первого экрана находятся в «Блоках главной».</p></div><a className="admin-secondary" href="#top" target="_blank" rel="noopener noreferrer">Открыть сайт</a></header>
     {error && <p role="alert" className="admin-error">{error}</p>}{message && <p role="status" className="admin-success"><Check />{message}</p>}
     {data ? <form className="admin-panel admin-form admin-settings-form" onSubmit={save}>
       <h2>Что видят посетители</h2><p>Заполните данные так, как они должны быть напечатаны на сайте. Номера станут ссылками для звонка.</p>
-      {settingFields.map(([key, label, hint]) => <label key={key}>{label}{key === "heroLead" ? <textarea rows={3} value={data.values[key]} disabled={busy} onChange={(event) => update(key, event.target.value)} maxLength={300} required /> : <input type={key === "generalEmail" ? "email" : "text"} value={data.values[key]} disabled={busy} onChange={(event) => update(key, event.target.value)} maxLength={180} required />}<small>{hint}</small></label>)}
+      {settingFields.map(([key, label, hint]) => <label key={key}>{label}<input type={key === "generalEmail" ? "email" : "text"} value={data.values[key]} disabled={busy} onChange={(event) => update(key, event.target.value)} maxLength={180} required /><small>{hint}</small></label>)}
       <button className="admin-primary" disabled={!dirty || busy}><FloppyDisk size={20} />{busy ? "Сохраняем…" : "Сохранить на сайте"}</button>
     </form> : <p role="status">Загружаем контакты…</p>}
   </>;

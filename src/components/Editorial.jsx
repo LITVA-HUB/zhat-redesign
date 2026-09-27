@@ -10,21 +10,15 @@ import { Brand } from "./Header";
 import { news, official } from "../data";
 import { useSiteData } from "../site-data";
 import { phoneHref } from "../phone";
+import { HomeTitle } from "./HomeTitle";
 export function Life() {
+  const { homepage } = useSiteData();
+  const life = homepage.life;
   return (
     <section className="life" id="life">
       <div className="life-copy">
-        <h2>
-          Учиться.
-          <br />
-          Пробовать.
-          <br />
-          <span>Быть собой.</span>
-        </h2>
-        <p>
-          Проекты, спорт, медиа и люди,
-          <br />с которыми хочется делать больше.
-        </p>
+        <h2><HomeTitle text={life.title} accentLast /></h2>
+        <p className="home-multiline">{life.description}</p>
         <ExternalLink href={official + "/studentu"} className="text-link">
           Жизнь техникума <ArrowUpRight size={22} />
         </ExternalLink>
@@ -41,11 +35,11 @@ export function Life() {
       </div>
       <div className="life-media">
         <img
-          src="/images/student-life.webp"
-          alt="Участницы церемонии открытия чемпионата высоких технологий"
+          src={life.image}
+          alt={life.imageAlt}
           loading="lazy"
         />
-        <span className="photo-caption">В центре событий. Вместе.</span>
+        <span className="photo-caption">{life.caption}</span>
       </div>
     </section>
   );
@@ -90,22 +84,18 @@ export function News() {
   );
 }
 export function Footer({ open }) {
-  const { siteSettings } = useSiteData();
+  const { siteSettings, homepage } = useSiteData();
   return (
     <>
       <section className="contact-section" id="contacts">
         <div className="wrap contact-content">
           <div>
-            <h2>
-              Твой следующий шаг
-              <br />
-              начинается здесь<span className="orange">.</span>
-            </h2>
+            <h2><HomeTitle text={homepage.contacts.title} accentDot /></h2>
             <button
               className="button primary"
               onClick={() => open("admission")}
             >
-              Как поступить <ArrowUpRight size={22} />
+              {homepage.contacts.buttonLabel} <ArrowUpRight size={22} />
             </button>
           </div>
           <div className="contact-details">

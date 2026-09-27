@@ -2,8 +2,9 @@ import { useState } from "react";
 import { ArrowRight, ArrowUpRight } from "@phosphor-icons/react";
 import { categories } from "../data";
 import { useSiteData } from "../site-data";
+import { HomeTitle } from "./HomeTitle";
 export function Programs({ onSelect }) {
-  const { programs } = useSiteData();
+  const { programs, homepage } = useSiteData();
   const [category, setCategory] = useState("Все направления");
   const [expanded, setExpanded] = useState(false);
   const filtered = programs.filter(
@@ -20,16 +21,8 @@ export function Programs({ onSelect }) {
       aria-labelledby="programs-title"
     >
       <div className="section-heading">
-        <h2 id="programs-title">
-          Найди своё
-          <br />
-          направление<span className="orange">.</span>
-        </h2>
-        <p>
-          От первого проекта —<br />к настоящей профессии.
-          <br />
-          Выбери то, что интересно тебе.
-        </p>
+        <h2 id="programs-title"><HomeTitle text={homepage.programs.title} accentDot /></h2>
+        <p className="home-multiline">{homepage.programs.intro}</p>
       </div>
       <div className="filters" role="group" aria-label="Направления обучения">
         {categories.map((c) => (

@@ -1314,8 +1314,8 @@ a.text-link {
   }
   .hero h1 {
     font-size: clamp(44px, 12vw, 68px);
-    letter-spacing: -2.2px;
-    line-height: 0.99;
+    letter-spacing: -0.045em;
+    line-height: 1.06;
   }
   .hero p {
     font-size: 14px;
@@ -1723,3 +1723,4 @@ a.text-link {
     gap: 12px;
   }
 }
+.home-multiline{white-space:pre-line}

@@ -5,6 +5,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from
 import { cleanEditorHtml, plainText } from "./cms-html.mjs";
 import { programs as basePrograms, categories, siteSettings as baseSiteSettings } from "../src/data.js";
 import { isValidPhone } from "../src/phone.js";
+import { defaultHomepage, homeSectionIds } from "../src/homepage.js";
 
 export class CmsError extends Error {
   constructor(status, message) {
@@ -66,12 +67,17 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       author_id INTEGER REFERENCES users(id)
     );
     CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS setting_revisions (
+      id INTEGER PRIMARY KEY, setting_name TEXT NOT NULL, version INTEGER NOT NULL,
+      value TEXT NOT NULL, created_at TEXT NOT NULL, actor_id INTEGER REFERENCES users(id)
+    );
     CREATE TABLE IF NOT EXISTS audit (
       id INTEGER PRIMARY KEY, actor_id INTEGER, action TEXT NOT NULL,
       subject TEXT NOT NULL, created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS revisions_entry ON revisions(entry_key,id DESC);
     CREATE INDEX IF NOT EXISTS entries_kind ON entries(kind,updated_at DESC);
+    CREATE INDEX IF NOT EXISTS setting_revisions_name ON setting_revisions(setting_name,id DESC);
   `);
 
   const basePages = new Map(catalogue.pages.map((p) => [p.key, p]));
@@ -100,11 +106,21 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       needsSourceBody: true,
     } : null;
   };
-  const menu = () => parse(db.prepare("SELECT value FROM settings WHERE name='menu'").get()?.value) || catalogue.groups;
   const setting = (name) => parse(db.prepare("SELECT value FROM settings WHERE name=?").get(name)?.value);
   const saveSetting = (name, value) => db.prepare(
     "INSERT INTO settings(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
   ).run(name, JSON.stringify(value));
+  const menuState = () => {
+    const stored = setting("menu");
+    if (Array.isArray(stored)) return { version: 0, groups: stored };
+    return stored && Array.isArray(stored.groups) ? stored : { version: 0, groups: catalogue.groups };
+  };
+  const menu = () => menuState().groups;
+  const saveMenu = (groups) => {
+    const next = { version: menuState().version + 1, groups };
+    saveSetting("menu", next);
+    return next;
+  };
   const payload = (row) => row?.draft ? parse(row.draft) : row?.published ? parse(row.published) : null;
   const syncPageMenu = (key, previous, next, custom) => {
     const groups = structuredClone(menu());
@@ -133,7 +149,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         changed = true;
       }
     }
-    if (changed) saveSetting("menu", groups);
+    if (changed) saveMenu(groups);
   };
 
   return {
@@ -175,6 +191,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       const rows = allEntries();
       const hiddenKeys = rows.filter((r) => r.archived).map((r) => r.key);
       const hidden = new Set(hiddenKeys);
+      const homepage = this.homepage().value;
       const overrides = rows.filter((r) => !r.archived && r.published).map((r) => {
         const p = parse(r.published);
         return { key: r.key, kind: r.kind, title: p.title, summary: p.summary,
@@ -190,14 +207,14 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         ...group, links: group.links.filter((link) => !hidden.has(link.key)),
       })), news, overrides, hiddenKeys,
         programs: this.programs().items.filter((item) => item.visible),
-        siteSettings: this.siteSettings().values, updatedAt: now() };
+        siteSettings: this.siteSettings().values, homepage, updatedAt: now() };
     },
     publicEntry(key) {
       const row = getEntry(key);
       return row && !row.archived && row.published ? parse(row.published) : null;
     },
     isHidden(key) { return Boolean(getEntry(key)?.archived); },
-    list(kind, query = "", page = 1, size = 40) {
+    list(kind, query = "", page = 1, size = 40, publishedOnly = false) {
       const registry = new Map();
       if (kind === "page") {
         for (const item of catalogue.pages) {
@@ -218,7 +235,9 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
           updatedAt: row.updated_at, image: p?.image || "" });
       }
       const q = String(query).trim().toLocaleLowerCase("ru");
-      const items = [...registry.values()].filter((p) => !q || (p.title + " " + p.key).toLocaleLowerCase("ru").includes(q));
+      const items = [...registry.values()].filter((p) =>
+        (!publishedOnly || p.status === "published") &&
+        (!q || (p.title + " " + p.key).toLocaleLowerCase("ru").includes(q)));
       items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
       return { items: items.slice((page - 1) * size, page * size), total: items.length, page, size };
     },
@@ -292,6 +311,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       return this.editable(key);
     },
     menu,
+    menuState,
     programs() {
       return setting("programs") || {
         version: 0, items: basePrograms.map((program) => ({ ...program, visible: true })),
@@ -335,6 +355,111 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     siteSettings() {
       return setting("site_settings") || { version: 0, values: baseSiteSettings };
     },
+    homepage() {
+      return setting("homepage") || { version: 0, value: defaultHomepage(this.siteSettings().values) };
+    },
+    homepageRevisions() {
+      return db.prepare(`SELECT id,version,value,created_at AS createdAt FROM setting_revisions
+        WHERE setting_name='homepage' ORDER BY id DESC LIMIT 20`).all().map((row) => ({
+          id: row.id, version: row.version, createdAt: row.createdAt,
+          title: parse(row.value)?.hero?.title?.replaceAll("\n", " ") || "Без заголовка",
+        }));
+    },
+    restoreHomepage(revisionId, expectedVersion, userId) {
+      if (!Number.isSafeInteger(revisionId) || revisionId < 1)
+        throw new CmsError(400, "Выберите версию главной");
+      const row = db.prepare("SELECT value FROM setting_revisions WHERE setting_name='homepage' AND id=?").get(revisionId);
+      if (!row) throw new CmsError(404, "Версия главной не найдена");
+      return this.setHomepage(parse(row.value), expectedVersion, userId, "homepage:restore");
+    },
+    setHomepage(value, expectedVersion, userId, action = "homepage") {
+      const current = this.homepage();
+      if (Number(expectedVersion) !== current.version)
+        throw new CmsError(409, "Блоки главной изменены другим сотрудником. Обновите страницу.");
+      const object = (item) => item && typeof item === "object" && !Array.isArray(item);
+      if (!object(value) || !object(value.hero) || !object(value.audiences) ||
+          !object(value.programs) || !object(value.life) || !object(value.directory) ||
+          !object(value.news) || !object(value.contacts))
+        throw new CmsError(400, "Структура блоков главной некорректна");
+      const text = (item, label, limit, maxLines = 1) => {
+        if (typeof item !== "string" || !item.trim() || item.length > limit ||
+            item.split(/\r?\n/).length > maxLines || item.split(/\r?\n/).some((line) => !line.trim()))
+          throw new CmsError(400, `Проверьте поле «${label}»`);
+        return item.trim().replace(/\r\n?/g, "\n");
+      };
+      const visible = (item, label) => {
+        if (typeof item !== "boolean") throw new CmsError(400, `Проверьте видимость блока «${label}»`);
+        return item;
+      };
+      if (!Array.isArray(value.order) || value.order.length !== homeSectionIds.length ||
+          new Set(value.order).size !== homeSectionIds.length ||
+          value.order.some((id) => !homeSectionIds.includes(id)))
+        throw new CmsError(400, "Проверьте порядок блоков главной");
+      const audienceIds = ["admission", "students", "parents"];
+      if (!Array.isArray(value.audiences.items) || value.audiences.items.length !== audienceIds.length ||
+          new Set(value.audiences.items.map((item) => item?.id)).size !== audienceIds.length ||
+          value.audiences.items.some((item) => !object(item) || !audienceIds.includes(item.id)))
+        throw new CmsError(400, "Проверьте быстрые переходы");
+      const audiences = value.audiences.items.map((item) => ({
+        id: item.id,
+        visible: visible(item.visible, item.title || item.id),
+        title: text(item.title, "название перехода", 65),
+        description: text(item.description, "описание перехода", 120),
+      }));
+      if (value.audiences.visible && !audiences.some((item) => item.visible))
+        throw new CmsError(400, "Оставьте хотя бы один быстрый переход или скройте весь блок");
+      const heroImage = safeImage(value.hero.image), lifeImage = safeImage(value.life.image);
+      if (!heroImage || !lifeImage) throw new CmsError(400, "Добавьте фотографии главного экрана и студенческой жизни");
+      const normalized = {
+        hero: {
+          title: text(value.hero.title, "заголовок первого экрана", 120, 3),
+          lead: text(value.hero.lead, "текст первого экрана", 300, 4),
+          location: text(value.hero.location, "города", 180),
+          image: heroImage,
+          imageAlt: text(value.hero.imageAlt, "описание главного фото", 180),
+          primaryLabel: text(value.hero.primaryLabel, "основная кнопка", 60),
+          secondaryLabel: text(value.hero.secondaryLabel, "дополнительная кнопка", 60),
+        },
+        audiences: { visible: visible(value.audiences.visible, "Быстрый переход"), items: audiences },
+        programs: {
+          title: text(value.programs.title, "заголовок направлений", 100, 2),
+          intro: text(value.programs.intro, "описание направлений", 260, 4),
+        },
+        life: {
+          visible: visible(value.life.visible, "Студенческая жизнь"),
+          title: text(value.life.title, "заголовок студенческой жизни", 120, 3),
+          description: text(value.life.description, "описание студенческой жизни", 260, 4),
+          image: lifeImage,
+          imageAlt: text(value.life.imageAlt, "описание фото студенческой жизни", 180),
+          caption: text(value.life.caption, "подпись к фото", 120),
+        },
+        directory: {
+          visible: visible(value.directory.visible, "Разделы"),
+          title: text(value.directory.title, "заголовок разделов", 100),
+        },
+        news: {
+          visible: visible(value.news.visible, "Новости"),
+          title: text(value.news.title, "заголовок новостей", 100, 2),
+        },
+        contacts: {
+          title: text(value.contacts.title, "заголовок контактов", 120, 2),
+          buttonLabel: text(value.contacts.buttonLabel, "кнопка контактов", 60),
+        },
+        order: [...value.order],
+      };
+      const next = { version: current.version + 1, value: normalized };
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (this.homepage().version !== current.version)
+          throw new CmsError(409, "Блоки главной изменены другим сотрудником. Обновите страницу.");
+        db.prepare(`INSERT INTO setting_revisions(setting_name,version,value,created_at,actor_id)
+          VALUES('homepage',?,?,?,?)`).run(current.version, JSON.stringify(current.value), now(), userId);
+        saveSetting("homepage", next);
+        auditAction(userId, action, "блоки главной страницы");
+        db.exec("COMMIT");
+      } catch (error) { db.exec("ROLLBACK"); throw error; }
+      return next;
+    },
     setSiteSettings(values, expectedVersion, userId) {
       const current = this.siteSettings();
       if (Number(expectedVersion) !== current.version)
@@ -367,17 +492,29 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         programCount: this.programs().items.filter((item) => item.visible).length,
       };
     },
-    setMenu(groups, userId) {
+    setMenu(groups, expectedVersion, userId) {
+      if (Number(expectedVersion) !== menuState().version)
+        throw new CmsError(409, "Меню изменено другим сотрудником. Загрузите актуальную версию.");
       if (!Array.isArray(groups) || groups.length !== 6 || groups.some((g) =>
-        !catalogue.groups.some((base) => base.title === g.title) || !Array.isArray(g.links))) throw new CmsError(400, "Структура меню некорректна");
+        !g || typeof g !== "object" || Array.isArray(g) ||
+        !catalogue.groups.some((base) => base.title === g.title) || !Array.isArray(g.links) || g.links.length > 1000) ||
+        new Set(groups.map((g) => g.title)).size !== catalogue.groups.length)
+        throw new CmsError(400, "Структура меню некорректна");
       const normalized = groups.map((g) => ({ title: g.title, links: g.links.map((l) => {
-        if (!l.key || !l.title || (!basePages.has(l.key) && !getEntry(l.key))) throw new CmsError(400, "Пункт меню должен вести к странице сайта");
-        return { key: l.key, title: String(l.title).slice(0, 200), url: l.url || l.key };
+        if (!l || typeof l.key !== "string" || !l.key || !basePages.has(l.key) && !getEntry(l.key))
+          throw new CmsError(400, "Пункт меню должен вести к странице сайта");
+        if (typeof l.title !== "string" || !l.title.trim() || l.title.length > 200)
+          throw new CmsError(400, "Проверьте название пункта меню");
+        const url = String(l.url || l.key);
+        if (url.length > 1000 || !/^(https?:\/\/|\/(?!\/))/i.test(url))
+          throw new CmsError(400, "Проверьте адрес пункта меню");
+        return { key: l.key, title: l.title.trim(), url };
       }) }));
-      db.prepare("INSERT INTO settings(name,value) VALUES('menu',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value")
-        .run(JSON.stringify(normalized));
+      if (normalized.some((group) => new Set(group.links.map((link) => link.key)).size !== group.links.length))
+        throw new CmsError(400, "В одном разделе есть повторяющиеся страницы");
+      const result = saveMenu(normalized);
       auditAction(userId, "menu", "разделы сайта");
-      return normalized;
+      return result;
     },
     media() { return db.prepare("SELECT id,name,mime,size,uploaded_at AS uploadedAt FROM media ORDER BY uploaded_at DESC").all(); },
     addMedia(item, userId) {

@@ -86,7 +86,7 @@ export function ServiceBar() {
   );
 }
 export function SectionDirectory({ compact = false }) {
-  const { groups } = useSiteData();
+  const { groups, homepage } = useSiteData();
   const [query, setQuery] = useState("");
   const matches = (link) =>
     link.title
@@ -97,7 +97,7 @@ export function SectionDirectory({ compact = false }) {
       <div className="portal-section-heading">
         <div>
           <p className="eyebrow">НУЖНОЕ — РЯДОМ</p>
-          <h2>{compact ? "Твой маршрут." : "Все разделы"}</h2>
+          <h2>{compact ? homepage.directory.title : "Все разделы"}</h2>
         </div>
         {compact && (
           <a href="#/search" className="text-link">
@@ -159,7 +159,7 @@ export function SectionDirectory({ compact = false }) {
   );
 }
 export function CurrentNews({ all = false }) {
-  const { news } = useSiteData();
+  const { news, homepage } = useSiteData();
   const [query, setQuery] = useState("");
   const items = news.filter((n) =>
     n.title.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")),
@@ -167,10 +167,7 @@ export function CurrentNews({ all = false }) {
   return (
     <section className={all ? "" : "news section wrap"} id="news">
       <div className="news-heading">
-        <h2>
-          На связи —<br />
-          техникум<span className="orange">.</span>
-        </h2>
+        <h2 className="home-multiline">{homepage.news.title.replace(/\.$/, "")}<span className="orange">.</span></h2>
         {!all && (
           <a className="text-link" href="#/news">
             Все новости <ArrowUpRight />

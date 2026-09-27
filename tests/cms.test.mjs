@@ -127,9 +127,40 @@ test("редактор: вход, черновик, публикация, пра
     } });
     assert.equal(restoredDraft.status, 200);
     assert.equal(restoredDraft.data.status, "draft");
+    assert.ok(!(await api("/api/admin/entries?kind=page&selectable=1&q=" + encodeURIComponent(newPage.data.key))).data.items.some((item) => item.key === newPage.data.key),
+      "Поиск для меню показывает только опубликованные страницы");
     assert.ok(!(await api("/api/site")).data.groups[0].links.some((item) => item.key === newPage.data.key), "Восстановленный черновик не оставляет битую ссылку");
     assert.equal((await api("/api/admin/entry", { method: "PUT", body: {
       ...restoredDraft.data, image: "javascript:alert(1)", expectedVersion: 7,
+    } })).status, 400);
+
+    const menuBefore = (await api("/api/admin/menu")).data;
+    assert.ok(menuBefore.version > 0, "Автоматическая синхронизация страниц обновляет версию меню");
+    const editedMenu = structuredClone(menuBefore.groups);
+    editedMenu[0].links[0].title = "Проверенное название раздела";
+    const menuSaved = await api("/api/admin/menu", { method: "PUT", body: {
+      groups: editedMenu, expectedVersion: menuBefore.version,
+    } });
+    assert.equal(menuSaved.status, 200);
+    assert.equal(menuSaved.data.version, menuBefore.version + 1);
+    assert.equal((await api("/api/site")).data.groups[0].links[0].title, "Проверенное название раздела");
+    assert.equal((await api("/api/admin/menu", { method: "PUT", body: {
+      groups: menuBefore.groups, expectedVersion: menuBefore.version,
+    } })).status, 409, "Старая вкладка не перезаписывает меню другого сотрудника");
+    const duplicateMenu = structuredClone(editedMenu);
+    duplicateMenu[1].title = duplicateMenu[0].title;
+    assert.equal((await api("/api/admin/menu", { method: "PUT", body: {
+      groups: duplicateMenu, expectedVersion: menuSaved.data.version,
+    } })).status, 400);
+    const missingGroup = structuredClone(editedMenu);
+    missingGroup[1] = null;
+    assert.equal((await api("/api/admin/menu", { method: "PUT", body: {
+      groups: missingGroup, expectedVersion: menuSaved.data.version,
+    } })).status, 400);
+    const unsafeMenu = structuredClone(editedMenu);
+    unsafeMenu[0].links[0].url = "javascript:alert(1)";
+    assert.equal((await api("/api/admin/menu", { method: "PUT", body: {
+      groups: unsafeMenu, expectedVersion: menuSaved.data.version,
     } })).status, 400);
 
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
@@ -185,6 +216,60 @@ test("редактор: вход, черновик, публикация, пра
     assert.equal((await api("/api/admin/settings", { method: "PUT", body: {
       values: { ...values, generalPhone: "12345" }, expectedVersion: 2,
     } })).status, 400);
+    const homepage = (await api("/api/admin/homepage")).data;
+    assert.equal(homepage.version, 0);
+    assert.equal(homepage.value.hero.title, "Твоё будущее\nнабирает\nвысоту.");
+    assert.equal(homepage.value.audiences.items.length, 3);
+    const editedHome = structuredClone(homepage.value);
+    editedHome.hero.title = "Учись\nсоздавай\nвзлетай.";
+    editedHome.hero.lead = "Тестовый текст первого экрана";
+    editedHome.hero.image = media.data.url;
+    editedHome.life.visible = false;
+    editedHome.order = ["news", "audiences", "programs", "directory", "life"];
+    editedHome.audiences.items.reverse();
+    const savedHome = await api("/api/admin/homepage", { method: "PUT", body: {
+      value: editedHome, expectedVersion: 0,
+    } });
+    assert.equal(savedHome.status, 200);
+    assert.equal(savedHome.data.version, 1);
+    const publicHome = (await api("/api/site")).data.homepage;
+    assert.equal(publicHome.hero.title, editedHome.hero.title);
+    assert.equal(publicHome.hero.image, media.data.url);
+    assert.equal(publicHome.life.visible, false);
+    assert.deepEqual(publicHome.order, editedHome.order);
+    assert.equal(publicHome.audiences.items[0].id, "parents");
+    assert.equal((await api("/api/admin/homepage", { method: "PUT", body: {
+      value: editedHome, expectedVersion: 0,
+    } })).status, 409, "Устаревшая версия не перезаписывает блоки");
+    const invalidHome = structuredClone(editedHome);
+    invalidHome.order = ["news", "news", "programs", "directory", "life"];
+    assert.equal((await api("/api/admin/homepage", { method: "PUT", body: {
+      value: invalidHome, expectedVersion: 1,
+    } })).status, 400);
+    invalidHome.order = editedHome.order;
+    invalidHome.hero.image = "javascript:alert(1)";
+    assert.equal((await api("/api/admin/homepage", { method: "PUT", body: {
+      value: invalidHome, expectedVersion: 1,
+    } })).status, 400);
+    invalidHome.hero.image = editedHome.hero.image;
+    invalidHome.audiences.items.forEach((item) => { item.visible = false; });
+    assert.equal((await api("/api/admin/homepage", { method: "PUT", body: {
+      value: invalidHome, expectedVersion: 1,
+    } })).status, 400);
+    const homeVersions = (await api("/api/admin/homepage/revisions")).data.items;
+    assert.equal(homeVersions.length, 1);
+    assert.equal(homeVersions[0].version, 0);
+    const restoredHome = await api("/api/admin/homepage/restore", { method: "POST", body: {
+      revisionId: homeVersions[0].id, expectedVersion: 1,
+    } });
+    assert.equal(restoredHome.status, 200);
+    assert.equal(restoredHome.data.version, 2);
+    assert.equal((await api("/api/site")).data.homepage.hero.title, homepage.value.hero.title);
+    assert.equal((await api("/api/admin/homepage/revisions")).data.items[0].version, 1,
+      "До восстановления текущая версия сохраняется в истории");
+    assert.equal((await api("/api/admin/homepage/restore", { method: "POST", body: {
+      revisionId: homeVersions[0].id, expectedVersion: 1,
+    } })).status, 409);
     const overview = (await api("/api/admin/overview")).data;
     assert.equal(overview.programCount, 10);
     assert.equal(overview.mediaCount, 1);
@@ -206,6 +291,8 @@ test("редактор: вход, черновик, публикация, пра
     assert.equal((await api("/api/admin/menu", { method: "PUT", body: { groups: catalogue.groups } })).status, 403);
     assert.equal((await api("/api/admin/programs", { method: "PUT", body: { items: changedPrograms, expectedVersion: 1 } })).status, 403);
     assert.equal((await api("/api/admin/settings", { method: "PUT", body: { values, expectedVersion: 1 } })).status, 403);
+    assert.equal((await api("/api/admin/homepage", { method: "PUT", body: { value: editedHome, expectedVersion: 1 } })).status, 403);
+    assert.equal((await api("/api/admin/homepage/revisions")).status, 403);
     assert.equal((await api("/api/admin/entry", { method: "PUT", body: { kind: "news", title: "Редактор пишет", status: "draft", expectedVersion: 0 } })).status, 200);
     assert.equal((await api("/api/admin/logout", { method: "POST" })).status, 200);
     assert.equal((await api("/api/admin/me")).status, 401);

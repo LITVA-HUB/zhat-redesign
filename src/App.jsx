@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { Header } from "./components/Header";
-import { Hero } from "./components/Hero";
+import { Hero, AudienceCards } from "./components/Hero";
 import { Programs } from "./components/Programs";
 import { Life, Footer } from "./components/Editorial";
 import {
@@ -11,17 +11,21 @@ import {
   usePortalRoute,
 } from "./components/Portal";
 import { Dialog } from "./components/Dialog";
-import { SiteProvider } from "./site-data";
+import { SiteProvider, useSiteData } from "./site-data";
 import { AdminApp } from "./components/AdminApp";
 export function App() {
   return <SiteProvider><SiteApp /></SiteProvider>;
 }
 function SiteApp() {
+  const { homepage, refresh } = useSiteData();
   const route = usePortalRoute();
+  const previousRoute = useRef(route);
   useEffect(() => {
     setDialog(null);
     if (!route.startsWith("#/"))
       document.title = "ЖАТ — твоё будущее набирает высоту";
+    if (previousRoute.current.startsWith("#/admin") && !route.startsWith("#/admin")) refresh();
+    previousRoute.current = route;
   }, [route]);
   const [dialog, setDialog] = useState(null);
   const [contrast, setContrast] = useState(() => {
@@ -39,6 +43,13 @@ function SiteApp() {
   }, [contrast]);
   const open = (type) => setDialog({ type });
   if (route.startsWith("#/admin")) return <AdminApp route={route} />;
+  const homeBlocks = {
+    audiences: <AudienceCards open={open} />,
+    programs: <Programs onSelect={(program) => setDialog({ type: "program", program })} />,
+    life: <Life />,
+    directory: <SectionDirectory compact />,
+    news: <CurrentNews />,
+  };
   return (
     <div id="top">
       <Header open={open} contrast={contrast} setContrast={setContrast} />
@@ -48,12 +59,8 @@ function SiteApp() {
       ) : (
         <main id="main" tabIndex={-1}>
           <Hero open={open} />
-          <Programs
-            onSelect={(program) => setDialog({ type: "program", program })}
-          />
-          <Life />
-          <SectionDirectory compact />
-          <CurrentNews />
+          {homepage.order.map((id) => id !== "programs" && !homepage[id].visible
+            ? null : <Fragment key={id}>{homeBlocks[id]}</Fragment>)}
         </main>
       )}
       <Footer open={open} />

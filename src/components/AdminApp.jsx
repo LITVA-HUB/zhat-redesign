@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, CaretDown, Check, ClockCounterClockwise,
   FileText, FloppyDisk, House, Image, LinkSimple, List, MagnifyingGlass,
-  Newspaper, Plus, SignOut, UploadSimple, Users, X, GraduationCap, GearSix,
+  Newspaper, Plus, SignOut, UploadSimple, Users, X, GraduationCap, GearSix, SquaresFour,
 } from "@phosphor-icons/react";
 import { Brand } from "./Header";
 import { useSiteData } from "../site-data";
 import { ProgramsManager, SettingsManager } from "./AdminManagers";
+import { HomepageManager } from "./HomepageManager";
 import "./admin.css";
 
 const adminLink = (section = "overview") => `#/admin/${section}`;
@@ -15,7 +16,11 @@ const displayDate = (value) => value ? new Intl.DateTimeFormat("ru", { day: "num
 
 async function responseJson(response) {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || "Не удалось выполнить действие");
+  if (!response.ok) {
+    const error = new Error(body.error || "Не удалось выполнить действие");
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 
@@ -59,8 +64,8 @@ function Login({ onSignedIn }) {
 
 const navItems = [
   ["overview", "Обзор", House], ["news", "Новости", Newspaper], ["pages", "Страницы", FileText],
-  ["media", "Файлы и фото", Image], ["programs", "Направления", GraduationCap],
-  ["settings", "Главная и контакты", GearSix], ["menu", "Меню сайта", List], ["users", "Сотрудники", Users],
+  ["media", "Файлы и фото", Image], ["homepage", "Блоки главной", SquaresFour], ["programs", "Направления", GraduationCap],
+  ["settings", "Контакты", GearSix], ["menu", "Меню сайта", List], ["users", "Сотрудники", Users],
 ];
 
 export function AdminApp({ route }) {
@@ -97,7 +102,7 @@ export function AdminApp({ route }) {
   if (section === "edit") {
     try { key = decodeURIComponent(route.slice("#/admin/edit/".length)); } catch { key = ""; }
   }
-  const visibleNav = navItems.filter(([id]) => auth.user.role === "admin" || !["menu", "users", "programs", "settings"].includes(id));
+  const visibleNav = navItems.filter(([id]) => auth.user.role === "admin" || !["menu", "users", "homepage", "programs", "settings"].includes(id));
   const navLabel = navItems.find(([id]) => id === section)?.[1] || (section === "edit" ? "Редактирование" : "Новый материал");
   const navigate = (id) => { setMobileMenu(false); location.hash = adminLink(id); };
   return <div className="admin-shell">
@@ -105,7 +110,7 @@ export function AdminApp({ route }) {
     <aside className={`admin-sidebar ${mobileMenu ? "open" : ""}`}>
       <Brand />
       <p className="admin-sidebar-title">Панель управления</p>
-      <nav aria-label="Редактор сайта">{visibleNav.map(([id, label, Icon], index) => <div key={id}>{(id === "overview" || id === "news" || id === "programs" || id === "users") && <span className="admin-nav-label">{({ overview: "РАБОЧИЙ СТОЛ", news: "ПУБЛИКАЦИИ", programs: "САЙТ", users: "ДОСТУП" })[id]}</span>}<a className={section === id ? "current" : ""} href={adminLink(id)} onClick={() => setMobileMenu(false)}><Icon size={21} />{label}</a></div>)}</nav>
+      <nav aria-label="Редактор сайта">{visibleNav.map(([id, label, Icon]) => <div key={id}>{(id === "overview" || id === "news" || id === "homepage" || id === "users") && <span className="admin-nav-label">{({ overview: "РАБОЧИЙ СТОЛ", news: "ПУБЛИКАЦИИ", homepage: "САЙТ", users: "ДОСТУП" })[id]}</span>}<a className={section === id ? "current" : ""} href={adminLink(id)} onClick={() => setMobileMenu(false)}><Icon size={21} />{label}</a></div>)}</nav>
       <div className="admin-sidebar-bottom"><a href="#top" onClick={() => setMobileMenu(false)}>Открыть сайт <ArrowUpRight /></a><div><strong>{auth.user.name}</strong><span>{auth.user.role === "admin" ? "Администратор" : "Редактор"}</span></div><button onClick={logout}><SignOut size={18} /> Выйти</button></div>
     </aside>
     <main className="admin-main" id="main">
@@ -116,6 +121,7 @@ export function AdminApp({ route }) {
         section === "new" ? <Editor key={route} api={api} kind={route.split("/")[3] === "page" ? "page" : "news"} refresh={refresh} /> :
         section === "edit" ? <Editor key={key} api={api} entryKey={key} refresh={refresh} /> :
         section === "media" ? <MediaLibrary api={api} /> :
+        section === "homepage" && auth.user.role === "admin" ? <HomepageManager api={api} refresh={refresh} userId={auth.user.id} /> :
         section === "programs" && auth.user.role === "admin" ? <ProgramsManager api={api} refresh={refresh} /> :
         section === "settings" && auth.user.role === "admin" ? <SettingsManager api={api} refresh={refresh} /> :
         section === "menu" && auth.user.role === "admin" ? <MenuManager api={api} refresh={refresh} /> :
@@ -144,11 +150,12 @@ function Overview({ api, navigate, canAdmin, user }) {
       <button onClick={() => navigate("new/news")}><Newspaper size={30} /><strong>Добавить новость</strong><span>Напишите текст, добавьте фото и опубликуйте.</span><ArrowRight /></button>
       <button onClick={() => navigate("pages")}><FileText size={30} /><strong>Изменить страницу</strong><span>Найдите нужный раздел и обновите информацию.</span><ArrowRight /></button>
       <button onClick={() => navigate("media")}><UploadSimple size={30} /><strong>Загрузить файл</strong><span>Фото, PDF, документ или видео для материала.</span><ArrowRight /></button>
+      {canAdmin && <button onClick={() => navigate("homepage")}><SquaresFour size={30} /><strong>Блоки главной</strong><span>Тексты, фото, порядок, видимость и прежние версии.</span><ArrowRight /></button>}
       {canAdmin && <button onClick={() => navigate("programs")}><GraduationCap size={30} /><strong>Направления</strong><span>Фото, описание и порядок специальностей.</span><ArrowRight /></button>}
     </div>
     <div className="admin-overview-bottom">
       <section className="admin-panel"><div className="admin-panel-heading"><h2>Черновики</h2><a href={adminLink("news")}>Все материалы <ArrowUpRight size={16} /></a></div>{data?.drafts?.length ? <ul className="admin-activity">{data.drafts.map((item) => <li key={item.key}><a href={editLink(item.key)}><strong>{item.title}</strong><span>Открыть черновик ↗</span></a><time>{displayDate(item.updatedAt)}</time></li>)}</ul> : <p>Черновиков пока нет. Создайте новость и сохраните её перед публикацией.</p>}</section>
-      <section className="admin-panel"><h2>Недавние действия</h2>{data?.activity?.length ? <ul className="admin-activity">{data.activity.slice(0, 6).map((item, index) => <li key={index}><span>{({ published: "Опубликован материал", draft: "Сохранён черновик", archived: "Скрыт материал", restore: "Восстановлена версия", upload: "Загружен файл", menu: "Обновлено меню", programs: "Обновлены направления", settings: "Обновлены контакты", setup: "Создан администратор", "user:create": "Добавлен сотрудник", "user:update": "Изменён доступ сотрудника" })[item.action] || "Изменение сайта"}: <strong>{item.subject}</strong></span><time>{displayDate(item.createdAt)}</time></li>)}</ul> : <p>Изменений пока нет.</p>}</section>
+      <section className="admin-panel"><h2>Недавние действия</h2>{data?.activity?.length ? <ul className="admin-activity">{data.activity.slice(0, 6).map((item, index) => <li key={index}><span>{({ published: "Опубликован материал", draft: "Сохранён черновик", archived: "Скрыт материал", restore: "Восстановлена версия", upload: "Загружен файл", menu: "Обновлено меню", homepage: "Обновлены блоки главной", "homepage:restore": "Восстановлена версия главной", programs: "Обновлены направления", settings: "Обновлены контакты", setup: "Создан администратор", "user:create": "Добавлен сотрудник", "user:update": "Изменён доступ сотрудника" })[item.action] || "Изменение сайта"}: <strong>{item.subject}</strong></span><time>{displayDate(item.createdAt)}</time></li>)}</ul> : <p>Изменений пока нет.</p>}</section>
     </div>
   </>;
 }
@@ -356,19 +363,68 @@ function MediaLibrary({ api }) {
 }
 
 function MenuManager({ api, refresh }) {
-  const [groups, setGroups] = useState([]);
+  const [menuData, setMenuData] = useState(null);
+  const [saved, setSaved] = useState(null);
   const [pages, setPages] = useState([]);
+  const [pageQuery, setPageQuery] = useState("");
+  const [pageTotal, setPageTotal] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState(false);
   const [message, setMessage] = useState("");
   const [chosen, setChosen] = useState({});
-  useEffect(() => { api("/api/admin/menu").then((data) => setGroups(data.groups)).catch((cause) => setError(cause.message)); api("/api/admin/entries?kind=page&size=200").then((data) => setPages(data.items)).catch(() => {}); }, [api]);
-  const move = (groupIndex, itemIndex, direction) => { const next = structuredClone(groups); const target = itemIndex + direction; if (target < 0 || target >= next[groupIndex].links.length) return; [next[groupIndex].links[itemIndex], next[groupIndex].links[target]] = [next[groupIndex].links[target], next[groupIndex].links[itemIndex]]; setGroups(next); };
-  const remove = (groupIndex, itemIndex) => { const next = structuredClone(groups); next[groupIndex].links.splice(itemIndex, 1); setGroups(next); };
-  const add = (groupIndex) => { const key = chosen[groupIndex]; const page = pages.find((p) => p.key === key); if (!page || groups[groupIndex].links.some((l) => l.key === key)) return; const next = structuredClone(groups); next[groupIndex].links.push({ key, title: page.title, url: key }); setGroups(next); };
-  const save = async () => { setError(""); setMessage(""); try { await api("/api/admin/menu", { method: "PUT", body: { groups } }); setMessage("Меню обновлено на сайте."); window.dispatchEvent(new Event("zhat:site-updated")); await refresh(); } catch (cause) { setError(cause.message); } };
-  return <><SectionHeading title="Меню сайта" description="Поменяйте порядок страниц стрелками или добавьте существующую страницу в раздел." action={<button className="admin-primary" onClick={save}><FloppyDisk /> Сохранить меню</button>} />
-    {error && <p role="alert" className="admin-error">{error}</p>}{message && <p role="status" className="admin-success">{message}</p>}
-    <div className="admin-menu-groups">{groups.map((group, i) => <details className="admin-panel" key={group.title}><summary><strong>{group.title}</strong><span>{group.links.length} пунктов <CaretDown /></span></summary><div className="admin-menu-items">{group.links.map((item, j) => <div key={item.key + j}><span>{item.title}</span><button aria-label={`Поднять ${item.title}`} title="Выше" disabled={j === 0} onClick={() => move(i, j, -1)}>↑</button><button aria-label={`Опустить ${item.title}`} title="Ниже" disabled={j === group.links.length - 1} onClick={() => move(i, j, 1)}>↓</button><button aria-label={`Убрать ${item.title} из меню`} title="Убрать из меню" onClick={() => remove(i, j)}><X size={17} /></button></div>)}</div><div className="admin-menu-add"><select value={chosen[i] || ""} onChange={(e) => setChosen({ ...chosen, [i]: e.target.value })} aria-label={`Добавить страницу в ${group.title}`}><option value="">Выберите страницу</option>{pages.map((page) => <option key={page.key} value={page.key}>{page.title}</option>)}</select><button onClick={() => add(i)}>Добавить</button></div></details>)}</div>
+  const groups = menuData?.groups || [];
+  const dirty = Boolean(menuData && saved && JSON.stringify(groups) !== JSON.stringify(saved.groups));
+  const load = async () => {
+    setError(""); setConflict(false);
+    try { const data = await api("/api/admin/menu"); setMenuData(data); setSaved(data); setMessage(""); }
+    catch (cause) { setError(cause.message); }
+  };
+  useEffect(() => { load(); }, [api]);
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(() => {
+      api(`/api/admin/entries?kind=page&selectable=1&size=100&q=${encodeURIComponent(pageQuery.trim())}`)
+        .then((result) => { if (active) { setPages(result.items); setPageTotal(result.total); } })
+        .catch((cause) => { if (active) { setConflict(false); setError(cause.message); } });
+    }, pageQuery ? 250 : 0);
+    return () => { active = false; clearTimeout(timer); };
+  }, [api, pageQuery]);
+  const change = (update) => { setMenuData((current) => {
+    const next = structuredClone(current); update(next.groups); return next;
+  }); setMessage(""); setError(""); setConflict(false); };
+  const move = (groupIndex, itemIndex, direction) => change((next) => {
+    const target = itemIndex + direction;
+    if (target < 0 || target >= next[groupIndex].links.length) return;
+    [next[groupIndex].links[itemIndex], next[groupIndex].links[target]] = [next[groupIndex].links[target], next[groupIndex].links[itemIndex]];
+  });
+  const remove = (groupIndex, itemIndex) => change((next) => { next[groupIndex].links.splice(itemIndex, 1); });
+  const rename = (groupIndex, itemIndex, title) => change((next) => { next[groupIndex].links[itemIndex].title = title; });
+  const add = (groupIndex) => {
+    const key = chosen[groupIndex];
+    const page = pages.find((item) => item.key === key);
+    if (!page || groups[groupIndex].links.some((link) => link.key === key)) return;
+    change((next) => { next[groupIndex].links.push({ key, title: page.title, url: page.sourceUrl || key }); });
+    setChosen((current) => ({ ...current, [groupIndex]: "" }));
+  };
+  const save = async () => {
+    if (!dirty || busy) return;
+    setBusy(true); setError(""); setConflict(false); setMessage("");
+    try {
+      const result = await api("/api/admin/menu", { method: "PUT", body: {
+        groups, expectedVersion: menuData.version,
+      } });
+      setMenuData(result); setSaved(result);
+      setMessage("Меню обновлено на сайте.");
+      window.dispatchEvent(new Event("zhat:site-updated")); await refresh();
+    } catch (cause) { setConflict(cause.status === 409); setError(cause.message); }
+    finally { setBusy(false); }
+  };
+  return <><SectionHeading title="Меню сайта" description="Разложите страницы по разделам, поменяйте порядок и названия пунктов. Для добавления старой страницы сначала найдите её ниже." action={<button className="admin-primary" onClick={save} disabled={!dirty || busy}><FloppyDisk /> {busy ? "Сохраняем…" : "Сохранить меню"}</button>} />
+    {error && <div role="alert" className="admin-error admin-home-notice">{error}{conflict && <button className="admin-secondary" onClick={load} disabled={busy}>Загрузить актуальное меню</button>}</div>}{message && <p role="status" className="admin-success"><Check size={20} />{message}</p>}
+    <div className="admin-panel admin-menu-finder"><label className="admin-search"><MagnifyingGlass size={19} /><input type="search" value={pageQuery} onChange={(event) => { setPageQuery(event.target.value); setChosen({}); }} placeholder="Название или адрес страницы" aria-label="Найти страницу для меню" /></label><p>{pageQuery ? `Найдено страниц: ${pageTotal}. Выберите нужную в разделе ниже.` : "Чтобы добавить страницу, найдите её по названию или адресу. Показаны первые 100 опубликованных страниц."}</p></div>
+    {menuData ? <div className="admin-menu-groups">{groups.map((group, i) => <details className="admin-panel" key={group.title}><summary><strong>{group.title}</strong><span>{group.links.length} пунктов <CaretDown /></span></summary><div className="admin-menu-items">{group.links.map((item, j) => <div key={item.key + j}><input value={item.title} maxLength={200} disabled={busy} aria-label={`Название пункта ${item.title}`} onChange={(event) => rename(i, j, event.target.value)} /><button aria-label={`Поднять ${item.title}`} title="Выше" disabled={busy || j === 0} onClick={() => move(i, j, -1)}>↑</button><button aria-label={`Опустить ${item.title}`} title="Ниже" disabled={busy || j === group.links.length - 1} onClick={() => move(i, j, 1)}>↓</button><button aria-label={`Убрать ${item.title} из меню`} title="Убрать из меню" disabled={busy} onClick={() => remove(i, j)}><X size={17} /></button></div>)}</div><div className="admin-menu-add"><select value={chosen[i] || ""} onChange={(event) => setChosen({ ...chosen, [i]: event.target.value })} aria-label={`Добавить страницу в ${group.title}`} disabled={busy}><option value="">Выберите страницу</option>{pages.filter((page) => !group.links.some((link) => link.key === page.key)).map((page) => <option key={page.key} value={page.key}>{page.title}</option>)}</select><button onClick={() => add(i)} disabled={busy || !chosen[i]}>Добавить</button></div></details>)}</div> : <p role="status">Загружаем меню…</p>}
+    {dirty && <div className="admin-save-bar"><span>Есть неопубликованные изменения</span><div><button className="admin-secondary" onClick={() => { setMenuData(saved); setError(""); setConflict(false); }} disabled={busy}>Отменить правки</button><button className="admin-primary" onClick={save} disabled={busy}><FloppyDisk size={18} /> Сохранить</button></div></div>}
   </>;
 }
 
