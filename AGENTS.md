@@ -19,3 +19,6 @@ Make the admin panel feel mature while remaining easy for nontechnical staff. In
 
 ## User direction — 2026-09-27, block editing
 Staff should manage the public site by clear, understandable blocks from the admin panel. Keep homepage text, images, visibility and order editable without code, while news, pages, programs, menu and contacts remain dedicated editors. Support a real preview, protect concurrent edits and preserve unfinished local changes.
+
+## User direction — 2026-10-26, staff usability and parity
+The admin is used by older, nontechnical college staff: keep text and controls large, label toolbar buttons with words, confirm destructive actions in a large dialog, never lose typed text (local autosave + leave warning), and keep the in-panel «Помощь» current. Every public function of the old zhat.ru must exist in the new site: Gosuslugi «Решаем вместе», Yandex Metrika (after cookie consent), map, partner and resource banners, social links, accessible version with text size and colour schemes. The archive and old /files/ links must keep working after the Joomla site is switched off.

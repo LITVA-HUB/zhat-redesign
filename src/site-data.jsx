@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import base from "./content.json";
 import { programs as basePrograms, siteSettings as baseSiteSettings } from "./data";
 import { defaultHomepage, isHomepageShape } from "./homepage";
+import { defaultExtras } from "./site-extras";
 
 const SiteContext = createContext(null);
 function homepagePreview() {
@@ -40,6 +41,8 @@ export function SiteProvider({ children }) {
       programs: live?.programs || basePrograms,
       siteSettings: live?.siteSettings || baseSiteSettings,
       homepage: homepagePreview() || live?.homepage || defaultHomepage(baseSiteSettings),
+      extras: live?.extras || defaultExtras,
+      announcement: live?.announcement || null,
       pages: [...pages.values()].filter((item) => !hidden.has(item.key)),
       overrides: new Map(overrides.map((item) => [item.key, item])),
       hidden,

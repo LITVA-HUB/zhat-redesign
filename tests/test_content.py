@@ -16,16 +16,16 @@ class ContentTests(unittest.TestCase):
   s=BeautifulSoup(sync.clean('<table><tr><td colspan="2"><a href="/files/a.pdf">Скачать</a></td></tr></table>','https://zhat.ru/'),'html.parser')
   self.assertEqual(s.a['href'],'https://zhat.ru/files/a.pdf');self.assertEqual(s.td['colspan'],'2')
  def test_core_catalog_and_files_complete(self):
-  d=json.loads((ROOT/'src/content.json').read_text());keys={p['key'] for p in d['pages']}
+  d=json.loads((ROOT/'src/content.json').read_text(encoding='utf-8'));keys={p['key'] for p in d['pages']}
   self.assertEqual(len(keys),len(d['pages']))
   for group in d['groups']:
    for link in group['links']:self.assertIn(link['key'],keys)
   for page in d['pages']:
-   body=json.loads((ROOT/'public'/page['contentFile'].lstrip('/')).read_text())
+   body=json.loads((ROOT/'public'/page['contentFile'].lstrip('/')).read_text(encoding='utf-8'))
    self.assertEqual(body['key'],page['key'])
    self.assertFalse(BeautifulSoup(body['html'],'html.parser').select('script,form,iframe,object,embed'))
  def test_archive_keys_unique(self):
-  archive=json.loads((ROOT/'public/content/archive.json').read_text());self.assertGreater(len(archive),3000)
+  archive=json.loads((ROOT/'public/content/archive.json').read_text(encoding='utf-8'));self.assertGreater(len(archive),3000)
   self.assertEqual(len({p['key'] for p in archive}),len(archive))
  def test_media_survives_without_autoplay_or_handlers(self):
   s=BeautifulSoup(sync.clean('<video autoplay onplay="bad()" poster="/p.jpg"><source src="/v.mp4" type="video/mp4"></video>',sync.BASE),'html.parser')
@@ -51,16 +51,16 @@ class ContentTests(unittest.TestCase):
    p=sync.parse_page(('https://zhat.ru/category','Категория'))
   self.assertIn('Вторая новость',p['text'])
  def test_every_section_has_content_or_explicit_source_state(self):
-  d=json.loads((ROOT/'src/content.json').read_text());pages={p['key']:p for p in d['pages']}
+  d=json.loads((ROOT/'src/content.json').read_text(encoding='utf-8'));pages={p['key']:p for p in d['pages']}
   self.assertEqual(sum(len(g['links']) for g in d['groups']),79)
   for g in d['groups']:
    for l in g['links']:
-    p=pages[l['key']];body=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text())
+    p=pages[l['key']];body=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text(encoding='utf-8'))
     self.assertTrue(body.get('error') or body.get('pending') or BeautifulSoup(body['html'],'html.parser').get_text(strip=True) or BeautifulSoup(body['html'],'html.parser').select('img,video,audio,a[href]'),l['key'])
  def test_download_index_unique(self):
-  d=json.loads((ROOT/'src/content.json').read_text())
+  d=json.loads((ROOT/'src/content.json').read_text(encoding='utf-8'))
   for p in d['pages']:
-   b=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text());urls=[r['url'] for r in b.get('resources',[])]
+   b=json.loads((ROOT/'public'/p['contentFile'].lstrip('/')).read_text(encoding='utf-8'));urls=[r['url'] for r in b.get('resources',[])]
    self.assertEqual(len(urls),len(set(urls)))
  def test_key_normalization(self):
   self.assertEqual(sync.key('https://zhat.ru/?view=article&id=123:slug&catid=26'),'/article/123')

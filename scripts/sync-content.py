@@ -90,18 +90,21 @@ def main():
    name=x.get_text(' ',strip=True);url=urljoin(BASE,x['href']);add(url,name);links.append({'title':name,'url':url,'key':key(url)})
   groups.append({'title':a.get_text(' ',strip=True),'links':links})
  for a in home.select('a[href]'):
-  if a.get_text(' ',strip=True) in ['Карта сайта','Время работы','Схема проезда','Цифровая среда','Расписание','Доступная среда','Оставить отзыв об организации','Противодействие коррупции','Все новости']:
+  if a.get_text(' ',strip=True) in ['Карта сайта','Время работы','Схема проезда','Цифровая среда','Расписание','Доступная среда','Оставить отзыв об организации','Противодействие коррупции','Все новости','Виртуальный тур','Медиа','Путёвка в жизнь','Содействие занятости населения','Трудоустройство']:
    add(a['href'],a.get_text(' ',strip=True))
+ # Homepage banners are image links without text; keep their target pages too.
+ for path,title in [('/events','Путёвка в жизнь'),('/employment-promotion','Содействие занятости населения'),('/employment','Трудоустройство'),('/virtualtour','Виртуальный тур')]:
+  add(BASE+path,title)
  news=[]
  for a in home.select('.blog1latestnews4 a'):
   title=a.get_text(' ',strip=True);url=urljoin(BASE,a['href']);parent=a.parent.parent;img=parent.find('img');add(url,title)
   news.append({'title':title,'url':url,'key':key(url),'image':urljoin(BASE,img['src']) if img else ''})
  # Include all program detail pages already linked by the prototype.
- data=(ROOT/'src/data.js').read_text();ids=re.findall(r'course\(\s*(\d+)',data)
+ data=(ROOT/'src/data.js').read_text(encoding='utf-8');ids=re.findall(r'course\(\s*(\d+)',data)
  for id in ids:add(BASE+'/?view=article&id='+id,'Специальность')
  forms=[{'title':a.get_text(' ',strip=True),'url':a['href']} for a in home.select('a[href]') if 'forms.yandex.ru/' in a['href']]
  if OUT.exists():
-  for previous in json.loads(OUT.read_text()).get('pages',[]):add(previous['url'],previous['title'])
+  for previous in json.loads(OUT.read_text(encoding='utf-8')).get('pages',[]):add(previous['url'],previous['title'])
  print('Importing',len(seeds),'navigation pages',flush=True)
  with ThreadPoolExecutor(max_workers=5) as pool:pages=list(pool.map(parse_page,seeds.values()))
  # Follow named article links from core sections, but keep the historical news archive as an index.
@@ -125,20 +128,41 @@ def main():
  archive_soup=BeautifulSoup(fetch(BASE+'/?view=article&id=867&catid=26'),'html.parser')
  archive=[{'key':key(a['href']),'title':a.get_text(' ',strip=True),'url':urljoin(BASE,a['href'])} for a in archive_soup.select('a.mod-articles-category-title')]
  directory=ROOT/'public/content';directory.mkdir(parents=True,exist_ok=True)
- (directory/'search.json').write_text(json.dumps([{'key':p['key'],'title':p['title'],'text':p['text']} for p in pages if p['key']!='/article/867'],ensure_ascii=False))
+ (directory/'search.json').write_text(json.dumps([{'key':p['key'],'title':p['title'],'text':p['text']} for p in pages if p['key']!='/article/867'],ensure_ascii=False),encoding='utf-8')
  for p in pages:
   filename=__import__('hashlib').sha256(p['key'].encode()).hexdigest()[:20]+'.json'
-  (directory/filename).write_text(json.dumps(p,ensure_ascii=False))
+  (directory/filename).write_text(json.dumps(p,ensure_ascii=False),encoding='utf-8')
   p['contentFile']='/content/'+filename
   p.pop('html',None);p.pop('resources',None);p['text']=p['text'][:2000]
  for a in archive:a['url']=BASE+'/?view=article&id='+a['key'].split('/')[-1]+'&catid=26'
- (directory/'archive.json').write_text(json.dumps(archive,ensure_ascii=False))
+ (directory/'archive.json').write_text(json.dumps(archive,ensure_ascii=False),encoding='utf-8')
  result={'archiveCount':len(archive),'updatedAt':datetime.now(timezone.utc).isoformat(),'groups':groups,'news':news,'forms':forms,'pages':pages}
- temp=OUT.with_suffix('.tmp');temp.write_text(json.dumps(result,ensure_ascii=False));temp.replace(OUT)
+ temp=OUT.with_suffix('.tmp');temp.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8');temp.replace(OUT)
  print('Saved',len(pages),'pages;',len(good),'with content;',len(pages)-len(good),'source errors',flush=True)
  for p in pages:
   if p['error']:print(p['url'],p['error'])
+def archive_file(directory,k):
+ return directory/(__import__('hashlib').sha256(k.encode()).hexdigest()[:20]+'.json')
+def import_archive(directory):
+ """Store every archived news body locally so the site keeps working after the old Joomla is switched off."""
+ directory.mkdir(parents=True,exist_ok=True)
+ archive=json.loads((ROOT/'public/content/archive.json').read_text(encoding='utf-8'))
+ todo=[a for a in archive if not archive_file(directory,a['key']).exists()]
+ print('Архив:',len(archive),'новостей, уже сохранено',len(archive)-len(todo),', осталось',len(todo),flush=True)
+ done=failed=0
+ def one(a):
+  page=parse_page((a['url'],a['title']))
+  if page['error']:return a,page
+  temp=archive_file(directory,a['key']).with_suffix('.tmp');temp.write_text(json.dumps(page,ensure_ascii=False),encoding='utf-8');temp.replace(archive_file(directory,a['key']))
+  return a,page
+ with ThreadPoolExecutor(max_workers=4) as pool:
+  for a,page in pool.map(one,todo):
+   if page['error']:failed+=1;print('Ошибка:',a['url'],page['error'],flush=True)
+   else:done+=1
+   if (done+failed)%100==0:print('Сохранено',done,'из',len(todo),flush=True)
+ print('Готово: сохранено',done,', ошибок',failed,'. Повторный запуск докачает пропущенные.',flush=True)
 if __name__=='__main__':
  if len(sys.argv)>1 and sys.argv[1]=='--page':
   print(json.dumps(parse_page((sys.argv[2],sys.argv[3] if len(sys.argv)>3 else '')),ensure_ascii=False))
+ elif len(sys.argv)>2 and sys.argv[1]=='--archive':import_archive(Path(sys.argv[2]))
  else:main()

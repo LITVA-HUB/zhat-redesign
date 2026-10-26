@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Check, FloppyDisk, Image, MagnifyingGlass, UploadSimple } from "@phosphor-icons/react";
 import { categories, programs as basePrograms } from "../data";
+import { useLeaveGuard } from "./AdminUi";
 
 const notifySite = (refresh) => {
   window.dispatchEvent(new Event("zhat:site-updated"));
@@ -17,6 +18,7 @@ export function ProgramsManager({ api, refresh }) {
   const [showGallery, setShowGallery] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  useLeaveGuard(dirty, "Вы не сохранили изменения в специальностях. Если уйти, они пропадут.");
   useEffect(() => {
     api("/api/admin/programs").then((result) => {
       setData(result); setSelected(result.items[0]?.id);
@@ -107,6 +109,7 @@ export function SettingsManager({ api, refresh }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  useLeaveGuard(dirty, "Вы не сохранили изменения в контактах. Если уйти, они пропадут.");
   useEffect(() => { api("/api/admin/settings").then(setData).catch((cause) => setError(cause.message)); }, [api]);
   const update = (key, value) => { setData((current) => ({ ...current, values: { ...current.values, [key]: value } })); setDirty(true); setMessage(""); };
   const save = async (event) => {

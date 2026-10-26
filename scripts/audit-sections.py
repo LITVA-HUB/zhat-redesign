@@ -10,14 +10,14 @@ from urllib.request import Request, urlopen
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
-catalog = json.loads((ROOT / 'src/content.json').read_text())
+catalog = json.loads((ROOT / 'src/content.json').read_text(encoding='utf-8'))
 pages = {p['key']: p for p in catalog['pages']}
 urls = {}
 rows = []
 for group in catalog['groups']:
     for link in group['links']:
         page = pages[link['key']]
-        body = json.loads((ROOT / 'public' / page['contentFile'].lstrip('/')).read_text())
+        body = json.loads((ROOT / 'public' / page['contentFile'].lstrip('/')).read_text(encoding='utf-8'))
         soup = BeautifulSoup(body['html'], 'html.parser')
         for node in soup.select('a[href], video[src], source[src]'):
             url = node.get('href') or node.get('src')
@@ -45,7 +45,7 @@ def check(url):
 
 # Reuse a completed audit only when explicitly passed (useful for report regeneration).
 if len(sys.argv) == 3 and sys.argv[1] == '--results':
-    results = json.loads(Path(sys.argv[2]).read_text())
+    results = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
     if {r['url'] for r in results} != set(urls):
         raise SystemExit('Saved results do not cover the current file set; run a fresh audit.')
 else:
@@ -54,7 +54,7 @@ else:
 checked_at = datetime.now(timezone.utc).isoformat()
 failed = [r for r in results if r.get('error')]
 health = {'checkedAt': checked_at, 'checked': len(results), 'available': len(results)-len(failed), 'unavailable': {r['url']: r['error'] for r in failed}}
-(ROOT / 'src/source-health.json').write_text(json.dumps(health, ensure_ascii=False, indent=2))
+(ROOT / 'src/source-health.json').write_text(json.dumps(health, ensure_ascii=False, indent=2),encoding='utf-8')
 report = ['# Покрытие разделов ЖАТ', '', f'Проверка: {checked_at[:10]}. Источник: https://zhat.ru/.', '',
           f'{len(rows)} пунктов меню в шести разделах. Проверено {len(results)} уникальных ссылок на официальные файлы и медиа: {len(results)-len(failed)} доступны, {len(failed)} недоступны. Ошибки HEAD перепроверены GET. Это доступность HTTP, а не проверка содержания каждого PDF.', '',
           'Все пункты имеют локальный маршрут, навигацию по своей группе и ссылку на источник. Неопубликованные сведения не придуманы. Каталоги документов содержат поиск; официальные формы и файлы остаются у ЖАТ.', '']
@@ -67,5 +67,5 @@ for group in catalog['groups']:
 report += ['## Недоступные файлы на стороне источника', '', 'Доступность показана в интерфейсе с датой проверки. Повторить: `npm run audit:sections`.', '']
 for r in failed:
     report.append(f"- [{r['url'].split('/')[-1]}]({quote(r['url'],safe=':/?&=%+#')}) — {r['error']}")
-(ROOT/'docs/SECTION-COVERAGE.md').write_text('\n'.join(report)+'\n')
+(ROOT/'docs/SECTION-COVERAGE.md').write_text('\n'.join(report)+'\n',encoding='utf-8')
 print(f'{len(rows)} sections; {len(results)} files checked; {len(failed)} unavailable at source.')

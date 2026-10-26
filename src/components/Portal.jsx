@@ -19,6 +19,7 @@ import sourceHealth from "../source-health.json";
 import { sectionGuides } from "../section-guides";
 import { useSiteData } from "../site-data";
 import { phoneHref } from "../phone";
+import { GosuslugiWidget, YandexMap } from "./SiteExtras";
 export function usePortalRoute() {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
@@ -158,6 +159,8 @@ export function SectionDirectory({ compact = false }) {
     </section>
   );
 }
+const newsDate = (value) =>
+  new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Moscow" }).format(new Date(value));
 export function CurrentNews({ all = false }) {
   const { news, homepage } = useSiteData();
   const [query, setQuery] = useState("");
@@ -195,6 +198,7 @@ export function CurrentNews({ all = false }) {
               </span>
             </div>
             <div className="news-meta">
+              {n.publishedAt && <time dateTime={n.publishedAt}>{newsDate(n.publishedAt)}</time>}
               <span>Жизнь техникума</span>
             </div>
             <h3>{n.title}</h3>
@@ -352,6 +356,10 @@ function Feedback() {
         </p>
         <a href={pageHref("/worktime")}>Время работы →</a>
       </div>
+      <GosuslugiWidget />
+      <h2 className="feedback-map-title">Как нас найти</h2>
+      <p className="portal-lead">{siteSettings.admissionAddress}</p>
+      <YandexMap />
     </>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { ExternalLink } from "./Dialog";
 import { official } from "../data";
+import { AccessibilityPanel } from "./SiteExtras";
 export function Brand() {
   return (
     <a href="#top" className="brand" aria-label="ЖАТ — на главную">
@@ -22,7 +23,9 @@ export function Brand() {
     </a>
   );
 }
-export function Header({ open, contrast, setContrast }) {
+export function Header({ open, a11y }) {
+  const contrast = a11y.state.on;
+  const setContrast = (on) => a11y.setState((current) => ({ ...current, on }));
   const [menu, setMenu] = useState(false);
   const act = (type) => {
     setMenu(false);
@@ -46,6 +49,7 @@ export function Header({ open, contrast, setContrast }) {
           <span>{contrast ? "Обычная версия" : "Версия для слабовидящих"}</span>
         </button>
       </div>
+      <AccessibilityPanel state={a11y.state} setState={a11y.setState} />
       <header className="header">
         <Brand />
         <nav className="desktop-nav" aria-label="Основная навигация">

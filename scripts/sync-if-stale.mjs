@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { python, pythonEnv } from "./python.mjs";
 let stale = true;
 try {
   const content = JSON.parse(
@@ -11,9 +12,9 @@ try {
 if (stale) {
   try {
     execFileSync(
-      "python3",
+      python,
       [fileURLToPath(new URL("sync-content.py", import.meta.url))],
-      { stdio: "inherit", timeout: 180000 },
+      { stdio: "inherit", timeout: 180000, env: pythonEnv },
     );
   } catch {
     console.warn(

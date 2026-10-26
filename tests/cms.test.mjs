@@ -302,3 +302,108 @@ test("редактор: вход, черновик, публикация, пра
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("редактор: даты новостей, файлы, объявление, партнёры и свой пароль", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "zhat-cms-test-"));
+  const store = createCmsStore({ dbPath: join(dir, "site.sqlite"), catalogue, archive, contentRoot: join(root, "public") });
+  const handler = createCmsHandler({ store, uploadDir: join(dir, "uploads"), setupToken: "test-setup-token" });
+  const server = createServer((req, res) => handler(req, res));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  let cookie = "", csrf = "";
+  const api = async (path, { method = "GET", body, headers = {} } = {}) => {
+    const res = await fetch(base + path, { method, headers: {
+      ...(body && !(body instanceof Uint8Array) ? { "Content-Type": "application/json" } : {}),
+      Cookie: cookie, "X-CSRF-Token": csrf, ...headers,
+    }, body: body === undefined ? undefined : body instanceof Uint8Array ? body : JSON.stringify(body) });
+    return { status: res.status, data: await res.json().catch(() => null), cookie: res.headers.get("set-cookie") };
+  };
+  const signIn = async (username, password) => {
+    const result = await api("/api/admin/login", { method: "POST", body: { username, password } });
+    assert.equal(result.status, 200, `Вход ${username}`);
+    cookie = result.cookie.split(";")[0]; csrf = result.data.csrf;
+  };
+  try {
+    const created = await api("/api/admin/setup", { method: "POST", body: { token: "test-setup-token", username: "owner", name: "Администратор", password: "long-password-123" } });
+    cookie = created.cookie.split(";")[0]; csrf = created.data.csrf;
+
+    // An archived news item keeps the date from its title when a typo is fixed.
+    const old = archive.find((item) => /^\d{2}\.\d{2}\.\d{4}/.test(item.title));
+    const [day, month, year] = old.title.slice(0, 10).split(".");
+    const opened = (await api("/api/admin/entry?key=" + encodeURIComponent(old.key))).data;
+    assert.equal(opened.publishedAt.slice(0, 10), `${year}-${month}-${day}`);
+    const fixed = await api("/api/admin/entry", { method: "PUT", body: {
+      ...opened, html: "<p>Исправленный текст</p>", status: "published", expectedVersion: 0 } });
+    assert.equal(fixed.status, 200);
+    assert.equal(fixed.data.publishedAt, opened.publishedAt, "Правка не переносит старую новость наверх");
+    const dated = await api("/api/admin/entry", { method: "PUT", body: {
+      kind: "news", title: "Новость с датой", html: "<p>Текст</p>", status: "published", publishedAt: "2026-10-01", expectedVersion: 0 } });
+    assert.equal(dated.data.publishedAt.slice(0, 10), "2026-10-01");
+    assert.equal((await api("/api/admin/entry", { method: "PUT", body: {
+      kind: "news", title: "Плохая дата", html: "<p>Текст</p>", status: "draft", publishedAt: "вчера", expectedVersion: 0 } })).status, 400);
+    const newsList = (await api("/api/admin/entries?kind=news&size=3")).data;
+    assert.ok(newsList.items[0].publishedAt >= newsList.items[1].publishedAt, "Новости в редакторе идут по дате события");
+    assert.equal((await api("/api/admin/entries?kind=news&status=draft")).data.total, 0);
+    const versions = (await api("/api/admin/revisions?key=" + encodeURIComponent(old.key))).data.items;
+    assert.equal(versions[0].author, "Администратор");
+    assert.equal(versions[0].status, "original");
+
+    // Files: an image used in a news item cannot be deleted; an unused one can.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
+    const upload = async (name) => (await api("/api/admin/media", { method: "POST", body: png, headers: { "Content-Type": "image/png", "X-File-Name": encodeURIComponent(name) } })).data;
+    const used = await upload("обложка.png"), spare = await upload("лишнее.png");
+    await api("/api/admin/entry", { method: "PUT", body: { ...dated.data, image: used.url, status: "published", expectedVersion: dated.data.version } });
+    const media = (await api("/api/admin/media")).data.items;
+    assert.equal(media.find((item) => item.id === used.id).used, true);
+    assert.equal(media.find((item) => item.id === spare.id).used, false);
+    const blocked = await api("/api/admin/media?id=" + used.id, { method: "DELETE" });
+    assert.equal(blocked.status, 409);
+    assert.match(blocked.data.error, /Новость с датой/);
+    assert.equal((await api("/api/admin/media", { method: "PATCH", body: { id: spare.id, name: "Расписание.png" } })).data.name, "Расписание.png");
+    assert.equal((await api("/api/admin/media?id=" + spare.id, { method: "DELETE" })).status, 200);
+    assert.equal((await fetch(base + spare.url)).status, 404);
+
+    // Partners, map and widgets from the old homepage.
+    const extras = (await api("/api/admin/extras")).data;
+    assert.equal(extras.value.integrations.gosuslugiId, "232010");
+    assert.ok(extras.value.partners.items.length >= 15);
+    for (const item of [...extras.value.partners.items, ...extras.value.resources.items])
+      assert.ok((await readFile(join(root, "public", item.image.slice(1)))).length > 1000, `Логотип ${item.title} в проекте`);
+    const edited = structuredClone(extras.value);
+    edited.partners.items.unshift({ title: "Новый партнёр", url: "https://example.org/", image: used.url });
+    edited.social.telegram = "https://t.me/zhat";
+    assert.equal((await api("/api/admin/extras", { method: "PUT", body: { value: edited, expectedVersion: 0 } })).status, 200);
+    assert.equal((await api("/api/site")).data.extras.partners.items[0].title, "Новый партнёр");
+    assert.equal((await api("/api/admin/extras", { method: "PUT", body: { value: edited, expectedVersion: 0 } })).status, 409);
+    assert.equal((await api("/api/admin/extras", { method: "PUT", body: {
+      value: { ...edited, map: { ...edited.map, embed: "https://evil.example/map" } }, expectedVersion: 1 } })).status, 400);
+    assert.equal((await api("/api/admin/extras", { method: "PUT", body: {
+      value: { ...edited, social: { ...edited.social, vk: "javascript:alert(1)" } }, expectedVersion: 1 } })).status, 400);
+
+    // Any staff member can post an announcement; it disappears after its end date.
+    await api("/api/admin/users", { method: "POST", body: { username: "writer", name: "Редактор", role: "editor", password: "writer-password-123" } });
+    await signIn("writer", "writer-password-123");
+    assert.equal((await api("/api/admin/extras", { method: "PUT", body: { value: edited, expectedVersion: 1 } })).status, 403);
+    assert.equal((await api("/api/admin/media?id=" + used.id, { method: "DELETE" })).status, 403, "Редактор не удаляет чужие файлы");
+    assert.equal((await api("/api/admin/announcement", { method: "PUT", body: { value: { visible: true, text: "" }, expectedVersion: 0 } })).status, 400);
+    const notice = await api("/api/admin/announcement", { method: "PUT", body: { value: {
+      visible: true, text: "Завтра занятия по расписанию субботы", link: "#/news", tone: "warning", until: "2099-01-01" }, expectedVersion: 0 } });
+    assert.equal(notice.status, 200);
+    assert.equal((await api("/api/site")).data.announcement.text, "Завтра занятия по расписанию субботы");
+    assert.equal((await api("/api/admin/announcement", { method: "PUT", body: { value: {
+      ...notice.data.value, until: "2020-01-01" }, expectedVersion: 1 } })).status, 200);
+    assert.equal((await api("/api/site")).data.announcement, null, "Просроченное объявление не показывается");
+
+    // Staff change their own password; the old one stops working.
+    assert.equal((await api("/api/admin/password", { method: "POST", body: { current: "wrong-password", next: "new-writer-password" } })).status, 403);
+    assert.equal((await api("/api/admin/password", { method: "POST", body: { current: "writer-password-123", next: "short" } })).status, 400);
+    assert.equal((await api("/api/admin/password", { method: "POST", body: { current: "writer-password-123", next: "new-writer-password" } })).status, 200);
+    assert.equal((await api("/api/admin/me")).status, 200, "Текущий сеанс остаётся открытым");
+    assert.equal((await api("/api/admin/login", { method: "POST", body: { username: "writer", password: "writer-password-123" } })).status, 401);
+    await signIn("writer", "new-writer-password");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

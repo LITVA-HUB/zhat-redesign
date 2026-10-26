@@ -13,6 +13,7 @@ import {
 import { Dialog } from "./components/Dialog";
 import { SiteProvider, useSiteData } from "./site-data";
 import { AdminApp } from "./components/AdminApp";
+import { Announcement, CookieConsent, GosuslugiWidget, Partners, useAccessibility } from "./components/SiteExtras";
 export function App() {
   return <SiteProvider><SiteApp /></SiteProvider>;
 }
@@ -28,19 +29,7 @@ function SiteApp() {
     previousRoute.current = route;
   }, [route]);
   const [dialog, setDialog] = useState(null);
-  const [contrast, setContrast] = useState(() => {
-    try {
-      return localStorage.getItem("zhat-contrast") === "true";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    document.documentElement.classList.toggle("high-contrast", contrast);
-    try {
-      localStorage.setItem("zhat-contrast", String(contrast));
-    } catch {}
-  }, [contrast]);
+  const a11y = useAccessibility();
   const open = (type) => setDialog({ type });
   if (route.startsWith("#/admin")) return <AdminApp route={route} />;
   const homeBlocks = {
@@ -51,8 +40,9 @@ function SiteApp() {
     news: <CurrentNews />,
   };
   return (
-    <div id="top">
-      <Header open={open} contrast={contrast} setContrast={setContrast} />
+    <div id="top" className={a11y.className}>
+      <Header open={open} a11y={a11y} />
+      <Announcement />
       <ServiceBar />
       {route.startsWith("#/") ? (
         <Portal key={route} route={route} />
@@ -61,10 +51,13 @@ function SiteApp() {
           <Hero open={open} />
           {homepage.order.map((id) => id !== "programs" && !homepage[id].visible
             ? null : <Fragment key={id}>{homeBlocks[id]}</Fragment>)}
+          <GosuslugiWidget />
+          <Partners />
         </main>
       )}
       <Footer open={open} />
       <Dialog content={dialog} onClose={() => setDialog(null)} />
+      <CookieConsent />
     </div>
   );
 }

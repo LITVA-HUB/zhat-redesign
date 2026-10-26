@@ -6,6 +6,7 @@ import { cleanEditorHtml, plainText } from "./cms-html.mjs";
 import { programs as basePrograms, categories, siteSettings as baseSiteSettings } from "../src/data.js";
 import { isValidPhone } from "../src/phone.js";
 import { defaultHomepage, homeSectionIds } from "../src/homepage.js";
+import { activeAnnouncement, defaultAnnouncement, defaultExtras } from "../src/site-extras.js";
 
 export class CmsError extends Error {
   constructor(status, message) {
@@ -26,6 +27,27 @@ const safeImage = (value) => {
   if (image.length > 1000 || !/^(https?:\/\/|\/(?!\/))/i.test(image))
     throw new CmsError(400, "Используйте ссылку на фото с сайта или загруженный файл");
   return image;
+};
+const safeLink = (value, label = "ссылку") => {
+  const link = String(value || "").trim();
+  if (!link) return "";
+  if (link.length > 1000 || !/^(https?:\/\/|\/(?!\/)|#\/)/i.test(link))
+    throw new CmsError(400, `Проверьте ${label}: адрес должен начинаться с https://`);
+  return link;
+};
+// Old Joomla news carry their date in the title: "22.09.2026г. Название".
+export const titleDate = (title) => {
+  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(String(title || "").trim());
+  if (!match) return null;
+  const date = new Date(Date.UTC(+match[3], +match[2] - 1, +match[1], 9));
+  return date.getUTCDate() === +match[1] && date.getUTCMonth() === +match[2] - 1 ? date.toISOString() : null;
+};
+const publicationDate = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? value + "T09:00:00Z" : String(value));
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1990 || date.getUTCFullYear() > 2100)
+    throw new CmsError(400, "Проверьте дату новости");
+  return date.toISOString();
 };
 const verifyPassword = (password, stored) => {
   if (!stored) return false;
@@ -96,13 +118,13 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         key, kind: baseNews.has(key) || archiveItems.has(key) ? "news" : "page", title: page.title,
         summary: page.text?.slice(0, 260) || "", html: body.html || "",
         image: baseNews.get(key)?.image || "", sourceUrl: page.url,
-        publishedAt: catalogue.updatedAt,
+        publishedAt: titleDate(page.title) || catalogue.updatedAt,
       };
     }
     const item = archiveItems.get(key);
     return item ? {
       key, kind: "news", title: item.title, summary: "", html: "",
-      image: "", sourceUrl: item.url, publishedAt: null,
+      image: "", sourceUrl: item.url, publishedAt: titleDate(item.title),
       needsSourceBody: true,
     } : null;
   };
@@ -122,6 +144,39 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
     return next;
   };
   const payload = (row) => row?.draft ? parse(row.draft) : row?.published ? parse(row.published) : null;
+  const mediaUsageText = () => [
+    ...db.prepare("SELECT published,draft FROM entries").all().flatMap((row) => [row.published || "", row.draft || ""]),
+    ...db.prepare("SELECT value FROM settings").all().map((row) => row.value),
+  ].join("\n");
+  const versioned = (name, fallback) => setting(name) || { version: 0, value: structuredClone(fallback) };
+  const saveVersioned = (name, value, expectedVersion, userId, action, subject, conflict) => {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = versioned(name, value);
+      if (Number(expectedVersion) !== current.version) throw new CmsError(409, conflict);
+      const next = { version: current.version + 1, value };
+      if (current.version) db.prepare(`INSERT INTO setting_revisions(setting_name,version,value,created_at,actor_id)
+        VALUES(?,?,?,?,?)`).run(name, current.version, JSON.stringify(current.value), now(), userId);
+      saveSetting(name, next);
+      auditAction(userId, action, subject);
+      db.exec("COMMIT");
+      return next;
+    } catch (error) { db.exec("ROLLBACK"); throw error; }
+  };
+  const linkItems = (block, label) => {
+    if (!block || typeof block !== "object" || !Array.isArray(block.items) || block.items.length > 60)
+      throw new CmsError(400, `Проверьте блок «${label}»`);
+    if (typeof block.visible !== "boolean") throw new CmsError(400, `Проверьте видимость блока «${label}»`);
+    const title = String(block.title || "").trim();
+    if (!title || title.length > 100) throw new CmsError(400, `Укажите заголовок блока «${label}»`);
+    return { visible: block.visible, title, items: block.items.map((item, index) => {
+      const name = String(item?.title || "").trim();
+      if (!name || name.length > 160) throw new CmsError(400, `Укажите название ${index + 1}-го пункта в блоке «${label}»`);
+      const image = safeImage(item.image);
+      if (!image) throw new CmsError(400, `Добавьте картинку для «${name}»`);
+      return { title: name, url: safeLink(item.url, `ссылку «${name}»`), image };
+    }) };
+  };
   const syncPageMenu = (key, previous, next, custom) => {
     const groups = structuredClone(menu());
     let changed = false;
@@ -199,7 +254,8 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
           publishedAt: p.publishedAt, url: r.source_url || "", updatedAt: r.updated_at };
       });
       const news = [
-        ...catalogue.news.filter((n) => !hiddenKeys.includes(n.key) && !overrides.some((p) => p.key === n.key)),
+        ...catalogue.news.filter((n) => !hidden.has(n.key) && !overrides.some((p) => p.key === n.key))
+          .map((n) => ({ ...n, publishedAt: n.publishedAt || titleDate(n.title) })),
         ...overrides.filter((p) => p.kind === "news"),
       ];
       news.sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""));
@@ -207,38 +263,41 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         ...group, links: group.links.filter((link) => !hidden.has(link.key)),
       })), news, overrides, hiddenKeys,
         programs: this.programs().items.filter((item) => item.visible),
-        siteSettings: this.siteSettings().values, homepage, updatedAt: now() };
+        siteSettings: this.siteSettings().values, homepage,
+        extras: this.extras().value, announcement: activeAnnouncement(this.announcement().value),
+        updatedAt: now() };
     },
     publicEntry(key) {
       const row = getEntry(key);
       return row && !row.archived && row.published ? parse(row.published) : null;
     },
     isHidden(key) { return Boolean(getEntry(key)?.archived); },
-    list(kind, query = "", page = 1, size = 40, publishedOnly = false) {
+    list(kind, query = "", page = 1, size = 40, publishedOnly = false, status = "") {
       const registry = new Map();
       if (kind === "page") {
         for (const item of catalogue.pages) {
           if (baseNews.has(item.key) || archiveItems.has(item.key)) continue;
           registry.set(item.key, { key: item.key, title: item.title, kind, sourceUrl: item.url,
-            status: item.error ? "source-error" : "published", version: 0, updatedAt: catalogue.updatedAt });
+            status: item.error ? "source-error" : "published", version: 0, updatedAt: catalogue.updatedAt, edited: false });
         }
       } else {
-        for (const item of archive) registry.set(item.key, { key: item.key, title: item.title, kind, sourceUrl: item.url,
-          status: "published", version: 0, updatedAt: catalogue.updatedAt });
-        for (const item of catalogue.news) registry.set(item.key, { key: item.key, title: item.title, kind, sourceUrl: item.url,
-          status: "published", version: 0, updatedAt: catalogue.updatedAt });
+        for (const item of [...archive, ...catalogue.news]) registry.set(item.key, { key: item.key, title: item.title, kind,
+          sourceUrl: item.url, status: "published", version: 0, updatedAt: catalogue.updatedAt,
+          publishedAt: titleDate(item.title), edited: false });
       }
       for (const row of allEntries().filter((r) => r.kind === kind)) {
         const p = payload(row) || baseline(row.key);
         registry.set(row.key, { key: row.key, title: p?.title || row.key, kind, sourceUrl: row.source_url,
           status: row.archived ? "archived" : row.draft ? "draft" : "published", version: row.version,
-          updatedAt: row.updated_at, image: p?.image || "" });
+          updatedAt: row.updated_at, publishedAt: p?.publishedAt || null, image: p?.image || "", edited: true });
       }
-      const q = String(query).trim().toLocaleLowerCase("ru");
+      const q = String(query || "").trim().toLocaleLowerCase("ru");
       const items = [...registry.values()].filter((p) =>
-        (!publishedOnly || p.status === "published") &&
+        (!publishedOnly || p.status === "published") && (!status || p.status === status) &&
         (!q || (p.title + " " + p.key).toLocaleLowerCase("ru").includes(q)));
-      items.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+      // News read like a newspaper (newest event first); pages show the latest edits first.
+      const order = kind === "news" ? (p) => p.publishedAt || p.updatedAt || "" : (p) => p.edited ? p.updatedAt : "";
+      items.sort((a, b) => order(b).localeCompare(order(a)));
       return { items: items.slice((page - 1) * size, page * size), total: items.length, page, size };
     },
     editable(key) {
@@ -249,7 +308,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
         status: row?.archived ? "archived" : row?.draft ? "draft" : "published",
         sourceUrl: row?.source_url || base?.sourceUrl || "", hasPublished: Boolean(row?.published || base) };
     },
-    save({ key, kind, title, summary = "", html = "", image = "", status = "draft", expectedVersion, group }, userId) {
+    save({ key, kind, title, summary = "", html = "", image = "", status = "draft", expectedVersion, group, publishedAt }, userId) {
       if (!["page", "news"].includes(kind)) throw new CmsError(400, "Выберите тип материала");
       if (!["draft", "published", "archived"].includes(status)) throw new CmsError(400, "Неизвестный статус");
       if (typeof title !== "string" || title.trim().length < 2 || title.length > 220) throw new CmsError(400, "Укажите название до 220 символов");
@@ -264,11 +323,13 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       if (row?.kind && row.kind !== kind || base?.kind && base.kind !== kind) throw new CmsError(409, "Тип существующего материала изменить нельзя");
       if ((row?.version || 0) !== Number(expectedVersion ?? 0)) throw new CmsError(409, "Материал изменён другим сотрудником. Обновите страницу перед сохранением.");
       const stamp = now();
+      // Fixing a typo must not move an old news item to the top: keep its date unless staff change it.
+      const previousDate = payload(row)?.publishedAt || (row?.published ? parse(row.published).publishedAt : null) || base?.publishedAt;
       const next = {
         key, kind, title: title.trim(), summary: String(summary).trim(), html: cleanedHtml,
         image: safeImage(image), group: String(group === undefined ? payload(row)?.group || "" : group).slice(0, 100),
         sourceUrl: row?.source_url || base?.sourceUrl || "",
-        publishedAt: status === "published" ? stamp : (payload(row)?.publishedAt || base?.publishedAt || null),
+        publishedAt: publicationDate(publishedAt) || previousDate || (status === "published" ? stamp : null),
       };
       const state = row ? { kind: row.kind, source_url: row.source_url, published: row.published,
         draft: row.draft, archived: row.archived } : base ? {
@@ -289,7 +350,17 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       return this.editable(key);
     },
     revisions(key) {
-      return db.prepare("SELECT id,created_at,author_id FROM revisions WHERE entry_key=? ORDER BY id DESC LIMIT 30").all(key);
+      // Each revision is the state *before* a save, so "author" is the person who replaced it.
+      return db.prepare(`SELECT r.id,r.created_at,r.author_id,r.state,u.name AS author FROM revisions r
+        LEFT JOIN users u ON u.id=r.author_id WHERE r.entry_key=? ORDER BY r.id DESC LIMIT 30`).all(key).map((row) => {
+        const state = parse(row.state);
+        const value = parse(state.draft) || parse(state.published);
+        return {
+          id: row.id, created_at: row.created_at, author_id: row.author_id, author: row.author || "",
+          title: value?.title || baseline(key)?.title || "",
+          status: state.archived ? "archived" : state.draft ? "draft" : state.published ? "published" : "original",
+        };
+      });
     },
     restore(key, revisionId, userId) {
       const row = getEntry(key);
@@ -482,6 +553,61 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       auditAction(userId, "settings", "контакты и первый экран");
       return next;
     },
+    extras() {
+      const stored = versioned("extras", defaultExtras);
+      return { ...stored, value: { ...structuredClone(defaultExtras), ...stored.value } };
+    },
+    setExtras(value, expectedVersion, userId) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new CmsError(400, "Проверьте настройки сайта");
+      const social = value.social || {}, map = value.map || {}, integrations = value.integrations || {};
+      const embed = String(map.embed || "").trim();
+      if (embed && !/^https:\/\/(yandex\.ru\/map-widget\/|www\.google\.com\/maps\/embed)/.test(embed))
+        throw new CmsError(400, "Карту можно вставить только из конструктора Яндекс Карт (адрес yandex.ru/map-widget/…)");
+      for (const [key, label] of [["gosuslugiId", "номер виджета Госуслуг"], ["metrikaId", "номер счётчика Метрики"]])
+        if (integrations[key] && !/^\d{3,12}$/.test(String(integrations[key]).trim()))
+          throw new CmsError(400, `Проверьте ${label}: только цифры`);
+      const normalized = {
+        social: {
+          vk: safeLink(social.vk, "ссылку ВКонтакте"), max: safeLink(social.max, "ссылку MAX"),
+          telegram: safeLink(social.telegram, "ссылку Telegram"),
+        },
+        map: { embed, link: safeLink(map.link, "ссылку на карту"), branchLink: safeLink(map.branchLink, "ссылку на карту филиала") },
+        integrations: {
+          gosuslugiId: String(integrations.gosuslugiId || "").trim(),
+          metrikaId: String(integrations.metrikaId || "").trim(),
+        },
+        resources: linkItems(value.resources, "Полезные ресурсы"),
+        partners: linkItems(value.partners, "Партнёры"),
+      };
+      return saveVersioned("extras", normalized, expectedVersion, userId, "extras", "партнёры, ссылки и виджеты",
+        "Настройки изменены другим сотрудником. Обновите страницу.");
+    },
+    announcement() { return versioned("announcement", defaultAnnouncement); },
+    setAnnouncement(value, expectedVersion, userId) {
+      if (!value || typeof value !== "object" || typeof value.visible !== "boolean")
+        throw new CmsError(400, "Проверьте объявление");
+      const text = String(value.text || "").trim();
+      if (value.visible && !text) throw new CmsError(400, "Напишите текст объявления");
+      if (text.length > 300) throw new CmsError(400, "Объявление должно быть короче 300 символов");
+      const until = String(value.until || "").trim();
+      if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new CmsError(400, "Проверьте дату окончания показа");
+      const linkLabel = String(value.linkLabel || "Подробнее").trim().slice(0, 40) || "Подробнее";
+      const normalized = {
+        visible: value.visible, text, link: safeLink(value.link, "ссылку объявления"), linkLabel,
+        tone: value.tone === "warning" ? "warning" : "info", until,
+      };
+      return saveVersioned("announcement", normalized, expectedVersion, userId,
+        normalized.visible ? "announcement" : "announcement:off", text || "объявление",
+        "Объявление изменено другим сотрудником. Обновите страницу.");
+    },
+    changeOwnPassword(userId, current, next, keepToken) {
+      const user = db.prepare("SELECT * FROM users WHERE id=?").get(userId);
+      if (!user || !verifyPassword(String(current || ""), user.password_hash)) throw new CmsError(403, "Текущий пароль указан неверно");
+      if (String(next || "").length < 10) throw new CmsError(400, "Новый пароль должен содержать не менее 10 символов");
+      db.prepare("UPDATE users SET password_hash=? WHERE id=?").run(passwordHash(next), userId);
+      db.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash<>?").run(userId, hash(keepToken || ""));
+      auditAction(userId, "password", user.username);
+    },
     dashboard() {
       const drafts = allEntries().filter((row) => row.draft && !row.archived).slice(0, 5).map((row) => ({
         key: row.key, title: parse(row.draft)?.title || row.key, updatedAt: row.updated_at,
@@ -489,6 +615,7 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       return {
         drafts, draftCount: db.prepare("SELECT count(*) AS n FROM entries WHERE draft IS NOT NULL AND archived=0").get().n,
         mediaCount: db.prepare("SELECT count(*) AS n FROM media").get().n,
+        announcement: this.announcement().value,
         programCount: this.programs().items.filter((item) => item.visible).length,
       };
     },
@@ -516,7 +643,42 @@ export function createCmsStore({ dbPath, catalogue, archive = [], contentRoot })
       auditAction(userId, "menu", "разделы сайта");
       return result;
     },
-    media() { return db.prepare("SELECT id,name,mime,size,uploaded_at AS uploadedAt FROM media ORDER BY uploaded_at DESC").all(); },
+    media() {
+      const haystack = mediaUsageText();
+      return db.prepare(`SELECT m.id,m.name,m.mime,m.size,m.uploaded_at AS uploadedAt,m.author_id AS authorId,u.name AS author
+        FROM media m LEFT JOIN users u ON u.id=m.author_id ORDER BY m.uploaded_at DESC`).all()
+        .map((item) => ({ ...item, url: `/api/site/media/${item.id}`, used: haystack.includes(`/api/site/media/${item.id}`) }));
+    },
+    mediaUsage(id) {
+      const needle = `/api/site/media/${id}`, places = [];
+      for (const row of allEntries()) {
+        if (row.published?.includes(needle) || row.draft?.includes(needle))
+          places.push(`«${payload(row)?.title || row.key}»`);
+      }
+      for (const [name, label] of [["programs", "направления"], ["homepage", "блоки главной"], ["extras", "партнёры и баннеры"], ["announcement", "объявление"]])
+        if (JSON.stringify(setting(name) || "").includes(needle)) places.push(label);
+      return places;
+    },
+    renameMedia(id, name, actor) {
+      const item = this.mediaById(id);
+      if (!item) throw new CmsError(404, "Файл не найден");
+      if (actor.role !== "admin" && item.author_id !== actor.id) throw new CmsError(403, "Переименовать можно только свой файл");
+      const clean = String(name || "").replace(/[\\/\x00-\x1f]/g, "").trim().slice(0, 160);
+      if (!clean) throw new CmsError(400, "Введите название файла");
+      db.prepare("UPDATE media SET name=? WHERE id=?").run(clean, id);
+      auditAction(actor.id, "media:rename", clean);
+      return this.media().find((media) => media.id === id);
+    },
+    deleteMedia(id, actor) {
+      const item = this.mediaById(id);
+      if (!item) throw new CmsError(404, "Файл не найден");
+      if (actor.role !== "admin" && item.author_id !== actor.id) throw new CmsError(403, "Удалить можно только свой файл");
+      const places = this.mediaUsage(id);
+      if (places.length) throw new CmsError(409, `Файл используется: ${places.slice(0, 5).join(", ")}${places.length > 5 ? " и ещё " + (places.length - 5) : ""}. Сначала уберите его оттуда.`);
+      db.prepare("DELETE FROM media WHERE id=?").run(id);
+      auditAction(actor.id, "media:delete", item.name);
+      return item;
+    },
     addMedia(item, userId) {
       const uploadedAt = now();
       db.prepare("INSERT INTO media(id,name,filename,mime,size,uploaded_at,author_id) VALUES(?,?,?,?,?,?,?)")

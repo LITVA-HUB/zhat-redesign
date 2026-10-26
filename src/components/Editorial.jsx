@@ -11,6 +11,7 @@ import { news, official } from "../data";
 import { useSiteData } from "../site-data";
 import { phoneHref } from "../phone";
 import { HomeTitle } from "./HomeTitle";
+import { SocialLinks, YandexMap } from "./SiteExtras";
 export function Life() {
   const { homepage } = useSiteData();
   const life = homepage.life;
@@ -84,7 +85,7 @@ export function News() {
   );
 }
 export function Footer({ open }) {
-  const { siteSettings, homepage } = useSiteData();
+  const { siteSettings, homepage, extras } = useSiteData();
   return (
     <>
       <section className="contact-section" id="contacts">
@@ -104,14 +105,14 @@ export function Footer({ open }) {
               {siteSettings.admissionPhone}
             </a>
             <p>{siteSettings.admissionAddress}</p>
-            <ExternalLink
-              href="https://yandex.ru/maps/-/CBRka6u62D"
-              className="text-link"
-            >
-              Как добраться <ArrowUpRight size={18} />
-            </ExternalLink>
+            {extras.map?.link && (
+              <ExternalLink href={extras.map.link} className="text-link">
+                Как добраться <ArrowUpRight size={18} />
+              </ExternalLink>
+            )}
           </div>
         </div>
+        <div className="wrap"><YandexMap /></div>
       </section>
       <footer className="footer wrap">
         <div className="footer-top">
@@ -127,14 +128,17 @@ export function Footer({ open }) {
             <h3>Всегда на связи</h3>
             <a href={`mailto:${siteSettings.generalEmail}`}>{siteSettings.generalEmail}</a>
             <a href={phoneHref(siteSettings.generalPhone)}>{siteSettings.generalPhone}</a>
-            <ExternalLink href="https://vk.com/zhatofficial_professionalitet">
-              Сообщество ВКонтакте <ArrowUpRight size={16} />
-            </ExternalLink>
+            <SocialLinks />
           </div>
           <div>
             <h3>Филиал в Раменском</h3>
             <p>{siteSettings.branchAddress}</p>
             <a href={phoneHref(siteSettings.branchPhone)}>{siteSettings.branchPhone}</a>
+            {extras.map?.branchLink && (
+              <ExternalLink href={extras.map.branchLink}>
+                Схема проезда <ArrowUpRight size={16} />
+              </ExternalLink>
+            )}
           </div>
           <div>
             <h3>Официальная информация</h3>

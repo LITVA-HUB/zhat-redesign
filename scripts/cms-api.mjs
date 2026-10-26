@@ -129,7 +129,9 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
       }
       if (path === "/api/admin/login" && req.method === "POST") {
         requireOrigin(req);
-        const identity = req.socket?.remoteAddress || "local";
+        // Behind the HTTPS proxy every request comes from the proxy, so count by the forwarded client address.
+        const forwarded = process.env.CMS_TRUST_PROXY === "1" && String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+        const identity = forwarded || req.socket?.remoteAddress || "local";
         const recent = (attempts.get(identity) || []).filter((time) => Date.now() - time < 15 * 60000);
         if (recent.length >= 8) throw new CmsError(429, "Слишком много попыток. Подождите 15 минут.");
         const body = await jsonBody(req);
@@ -199,8 +201,9 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
         const kind = request.searchParams.get("kind") === "news" ? "news" : "page";
         const page = Math.max(1, Math.min(1000, Number(request.searchParams.get("page") || 1) || 1));
         const size = Math.max(1, Math.min(200, Number(request.searchParams.get("size") || 40) || 40));
+        const status = ["draft", "published", "archived"].includes(request.searchParams.get("status")) ? request.searchParams.get("status") : "";
         respond(res, 200, store.list(kind, request.searchParams.get("q"), page, size,
-          kind === "page" && request.searchParams.get("selectable") === "1")); return true;
+          kind === "page" && request.searchParams.get("selectable") === "1", status)); return true;
       }
       if (path === "/api/admin/entry" && req.method === "GET") {
         const entry = store.editable(request.searchParams.get("key"));
@@ -245,6 +248,35 @@ export function createCmsHandler({ store, uploadDir, setupToken }) {
         try { respond(res, 201, store.addMedia({ id, name, filename, mime, size: data.length }, user.id)); }
         catch (error) { await unlink(join(uploadDir, filename)).catch(() => {}); throw error; }
         return true;
+      }
+      if (path === "/api/admin/media" && req.method === "PATCH") {
+        const body = await jsonBody(req);
+        respond(res, 200, store.renameMedia(String(body.id || ""), body.name, user)); return true;
+      }
+      if (path === "/api/admin/media" && req.method === "DELETE") {
+        const removed = store.deleteMedia(String(request.searchParams.get("id") || ""), user);
+        await unlink(join(uploadDir, removed.filename)).catch(() => {});
+        respond(res, 200, { ok: true }); return true;
+      }
+      if (path === "/api/admin/extras" && req.method === "GET") {
+        respond(res, 200, store.extras()); return true;
+      }
+      if (path === "/api/admin/extras" && req.method === "PUT") {
+        if (user.role !== "admin") throw new CmsError(403, "Только администратор меняет партнёров, ссылки и виджеты");
+        const body = await jsonBody(req);
+        respond(res, 200, store.setExtras(body.value, body.expectedVersion, user.id)); return true;
+      }
+      if (path === "/api/admin/announcement" && req.method === "GET") {
+        respond(res, 200, store.announcement()); return true;
+      }
+      if (path === "/api/admin/announcement" && req.method === "PUT") {
+        const body = await jsonBody(req);
+        respond(res, 200, store.setAnnouncement(body.value, body.expectedVersion, user.id)); return true;
+      }
+      if (path === "/api/admin/password" && req.method === "POST") {
+        const body = await jsonBody(req);
+        store.changeOwnPassword(user.id, body.current, body.next, token);
+        respond(res, 200, { ok: true }); return true;
       }
       if (path === "/api/admin/users" && req.method === "GET") {
         if (user.role !== "admin") throw new CmsError(403, "Только администратор управляет сотрудниками");

@@ -4,6 +4,7 @@ import {
   SquaresFour, UploadSimple, X,
 } from "@phosphor-icons/react";
 import { defaultHomepage, isHomepageShape } from "../homepage";
+import { useLeaveGuard } from "./AdminUi";
 
 const sections = {
   hero: { name: "Первый экран", detail: "Заголовок, фото и главные кнопки", anchor: "#top" },
@@ -39,6 +40,7 @@ export function HomepageManager({ api, refresh, userId }) {
   const [conflict, setConflict] = useState(false);
   const [message, setMessage] = useState("");
   const dirty = Boolean(data && saved && JSON.stringify(data.value) !== JSON.stringify(saved.value));
+  useLeaveGuard(dirty, "Изменения блоков главной ещё не опубликованы. Они сохранятся в этой вкладке, но посетители их не увидят.");
 
   const load = async (discardDraft = false) => {
     setError(""); setConflict(false);
