@@ -8,7 +8,7 @@ Browser: Codex In-app Browser. Desktop CSS viewports1280×920 and1440×1024, mob
 
 - Typography: Golos Text Variable, bold editorial Cyrillic headlines and clear smaller body/control text. Three-line hero retained. Larger program titles retain complete official names; no truncation.
 - Layout: open white surface; pale utility strip; horizontal nav; full-width rounded hero; three audience shortcuts; three program columns; dark life band; three editorial news columns; sky contacts. Mobile collapses to single column and compact menu. No horizontal document overflow at390/1440.
-- Palette: white/sky/ink/orange preserved. No extra gradients or hero tint on desktop. Mobile secondary CTA uses solidwhite to preserve contrast across aircraft image.
+- Palette (2026-10-26): white/sky with navy ink #0e2a47 and aviation-blue accent #1b5fc1 (variables --ink, --accent, --accent-strong, --accent-soft in src/styles.css); orange retired at the owner's request. No extra gradients or hero tint on desktop. Mobile secondary CTA uses solidwhite to preserve contrast across aircraft image.
 - Imagery: matching generated sky/aircraft, engine, code and electronics; WebP assets. Official logo and real source photographs replace imagined institution-specific visuals. Poster shown with contain to avoid cutting its content.
 - Copy: main hero, nav, CTA, headings and three audience labels match selected concept. Facts independently verified against official pages. No invented admissions-open state, employment claims or backend.
 - Icons: Phosphor uniform sizes/weights, functional arrow/eye/menu/close metaphors. Original institution emblem used rather than imitating the generated logo.

@@ -22,3 +22,6 @@ Staff should manage the public site by clear, understandable blocks from the adm
 
 ## User direction — 2026-10-26, staff usability and parity
 The admin is used by older, nontechnical college staff: keep text and controls large, label toolbar buttons with words, confirm destructive actions in a large dialog, never lose typed text (local autosave + leave warning), and keep the in-panel «Помощь» current. Every public function of the old zhat.ru must exist in the new site: Gosuslugi «Решаем вместе», Yandex Metrika (after cookie consent), map, partner and resource banners, social links, accessible version with text size and colour schemes. The archive and old /files/ links must keep working after the Joomla site is switched off.
+
+## User direction — 2026-10-26, palette and section browser
+The owner found the orange-on-near-black look unprofessional. The site and admin now use navy ink and an aviation-blue accent through the CSS variables in `src/styles.css`; headings are lighter (weight ~700, mild negative tracking). Keep new colours on those variables. The "Все разделы" browser is a tab list with a two-column link panel and search, not an accordion.

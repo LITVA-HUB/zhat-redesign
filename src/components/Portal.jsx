@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -89,10 +89,28 @@ export function ServiceBar() {
 export function SectionDirectory({ compact = false }) {
   const { groups, homepage } = useSiteData();
   const [query, setQuery] = useState("");
-  const matches = (link) =>
-    link.title
-      .toLocaleLowerCase("ru")
-      .includes(query.trim().toLocaleLowerCase("ru"));
+  const [active, setActive] = useState(0);
+  const tabs = useRef([]);
+  const q = query.trim().toLocaleLowerCase("ru");
+  const found = q
+    ? groups.flatMap((group) =>
+        group.links
+          .filter((link) => link.title.toLocaleLowerCase("ru").includes(q))
+          .map((link) => ({ ...link, group: shortTitles[group.title] || group.title })),
+      )
+    : [];
+  const current = groups[Math.min(active, groups.length - 1)];
+  const id = compact ? "home-directory" : "directory";
+  // Tabs follow the WAI-ARIA pattern: arrows move between sections, Home/End jump to the ends.
+  const keyDown = (event, index) => {
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+    const next = step ? (index + step + groups.length) % groups.length
+      : event.key === "Home" ? 0 : event.key === "End" ? groups.length - 1 : null;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(next);
+    tabs.current[next]?.focus();
+  };
   return (
     <section className={compact ? "directory-home wrap" : "directory"}>
       <div className="portal-section-heading">
@@ -100,62 +118,75 @@ export function SectionDirectory({ compact = false }) {
           <p className="eyebrow">НУЖНОЕ — РЯДОМ</p>
           <h2>{compact ? homepage.directory.title : "Все разделы"}</h2>
         </div>
-        {compact && (
-          <a href="#/search" className="text-link">
-            Найти материал <MagnifyingGlass />
-          </a>
-        )}
-      </div>
-      {!compact && (
-        <label className="portal-search">
+        <label className="portal-search directory-search">
           <MagnifyingGlass />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Найти раздел: практика, документы, приём…"
+            placeholder="Найти раздел, например «стипендия»"
             aria-label="Найти раздел"
           />
         </label>
-      )}
-      {!compact && (
-        <p className="sync-note">
-          Шесть разделов ·{" "}
-          {groups.reduce((sum, g) => sum + g.links.length, 0)} тем.
-          Выберите нужную или найдите по названию.
-        </p>
-      )}
-      {query && !groups.some((g) => g.links.some(matches)) && (
-        <p role="status" className="empty-state">
-          Такого раздела нет. Попробуйте другое слово или{" "}
-          <a href="#/search">поиск по всем материалам</a>.
-        </p>
-      )}
-      <div className="directory-grid">
-        {groups.map(
-          (group, i) =>
-            (!query || group.links.some(matches)) && (
-              <details
-                key={group.title + Boolean(query)}
-                open={query ? true : undefined}
-              >
-                <summary>
-                  <span className="directory-number">0{i + 1}</span>
-                  <span>{shortTitles[group.title] || group.title}</span>
-                  <span className="directory-plus">+</span>
-                </summary>
-                <div>
-                  {group.links.filter(matches).map((l, j) => (
-                    <a href={pageHref(l.key)} key={j}>
-                      {l.title}
-                      <ArrowUpRight size={16} />
-                    </a>
-                  ))}
-                </div>
-              </details>
-            ),
-        )}
       </div>
+      {q ? (
+        <div className="directory-results" role="region" aria-live="polite" aria-label="Найденные разделы">
+          <p className="directory-results-count">
+            {found.length ? `Найдено разделов: ${found.length}` : "Такого раздела нет."}
+            {" "}
+            <a href="#/search">Искать во всех материалах →</a>
+          </p>
+          <div className="directory-links">
+            {found.map((link) => (
+              <a href={pageHref(link.key)} key={link.group + link.key}>
+                <span>
+                  <small>{link.group}</small>
+                  {link.title}
+                </span>
+                <ArrowRight size={18} />
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : (
+        current && (
+          <div className="directory-browser">
+            <div className="directory-tabs" role="tablist" aria-label="Разделы сайта" aria-orientation="vertical">
+              {groups.map((group, i) => (
+                <button
+                  key={group.title}
+                  ref={(node) => { tabs.current[i] = node; }}
+                  role="tab"
+                  id={`${id}-tab-${i}`}
+                  aria-selected={group === current}
+                  aria-controls={`${id}-panel`}
+                  tabIndex={group === current ? 0 : -1}
+                  onClick={() => setActive(i)}
+                  onKeyDown={(event) => keyDown(event, i)}
+                >
+                  <span className="directory-number">0{i + 1}</span>
+                  <span className="directory-tab-title">{shortTitles[group.title] || group.title}</span>
+                  <span className="directory-count">{group.links.length}</span>
+                </button>
+              ))}
+            </div>
+            <div className="directory-panel" role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${active}`}>
+              <div className="directory-panel-head">
+                <h3>{current.title}</h3>
+                <span>{current.links.length} {current.links.length % 10 === 1 && current.links.length % 100 !== 11 ? "раздел" : [2, 3, 4].includes(current.links.length % 10) && ![12, 13, 14].includes(current.links.length % 100) ? "раздела" : "разделов"}</span>
+              </div>
+              <div className="directory-links">
+                {current.links.map((link, j) => (
+                  <a href={pageHref(link.key)} key={link.key + j}>
+                    <span>{link.title}</span>
+                    <ArrowRight size={18} />
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      )}
     </section>
   );
 }

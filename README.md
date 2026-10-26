@@ -8,9 +8,9 @@
 с мобильной навигацией, публичными материалами и понятным редактором для сотрудников.
 
 [![Checks](https://github.com/LITVA-HUB/zhat-redesign/actions/workflows/ci.yml/badge.svg)](https://github.com/LITVA-HUB/zhat-redesign/actions/workflows/ci.yml)
-![React](https://img.shields.io/badge/React-19-14222d?logo=react&logoColor=61dafb)
-![Vite](https://img.shields.io/badge/Vite-6-14222d?logo=vite&logoColor=ff6337)
-![Responsive](https://img.shields.io/badge/Design-Mobile%20ready-ff6337)
+![React](https://img.shields.io/badge/React-19-0e2a47?logo=react&logoColor=61dafb)
+![Vite](https://img.shields.io/badge/Vite-6-0e2a47?logo=vite&logoColor=8fbaf5)
+![Responsive](https://img.shields.io/badge/Design-Mobile%20ready-1b5fc1)
 
 [Возможности](#возможности) · [Редактор](#редактор-сайта) · [На телефоне](#на-телефоне) · [Запуск](#запуск) · [Устройство проекта](#устройство-проекта)
 
@@ -76,7 +76,7 @@
   <img src="docs/images/mobile-feedback.png" width="30%" alt="Обратная связь на телефоне" />
 </p>
 
-Небо и авиационная графика, крупная типографика, оранжевые акценты и простые маршруты к нужной информации. Шрифт — **Golos Text**, иконки — **Phosphor**.
+Небо и авиационная графика, крупная типографика, строгая сине-голубая гамма и простые маршруты к нужной информации. Шрифт — **Golos Text**, иконки — **Phosphor**.
 
 ## Запуск
 

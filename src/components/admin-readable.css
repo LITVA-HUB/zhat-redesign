@@ -11,7 +11,7 @@
 .admin-primary{font-size:17px;min-height:54px;padding:14px 22px}
 .admin-secondary{font-size:16px;min-height:50px}
 .admin-quiet{font-size:16px}
-.admin-shell :is(a,button,input,select,textarea,summary):focus-visible{outline:3px solid #f26442;outline-offset:2px}
+.admin-shell :is(a,button,input,select,textarea,summary):focus-visible{outline:3px solid #1b5fc1;outline-offset:2px}
 .admin-panel h2{font-size:24px}
 .admin-panel p{font-size:16px}
 .admin-edit-form label,.admin-form label{font-size:17px;gap:10px}
@@ -65,7 +65,7 @@
 /* Material editor */
 .admin-editor-layout{grid-template-columns:minmax(0,1fr) 320px}
 .admin-editor-label{font-size:17px;font-weight:700;margin-bottom:-14px;display:flex;gap:12px;align-items:center}
-.admin-editor-label span{color:#eb6848}
+.admin-editor-label span{color:#b3361b}
 .admin-editor-label em{font-weight:400;color:#7a5a12;background:#fff2d9;border-radius:8px;padding:3px 9px;font-style:normal;font-size:15px}
 .admin-edit-form label .admin-label-row{display:inline-flex;align-items:center;gap:8px;color:inherit}
 .admin-date-field input{max-width:280px}
@@ -78,7 +78,7 @@
 .admin-toolbar button:disabled{opacity:.45}
 .admin-editable{font-size:18px;min-height:420px;line-height:1.7}
 .admin-editable h2{font-size:26px;line-height:1.25}
-.admin-editable blockquote{border-left:4px solid #f26442;margin:0 0 1em;padding-left:18px;color:#3c535e}
+.admin-editable blockquote{border-left:4px solid #1b5fc1;margin:0 0 1em;padding-left:18px;color:#3c535e}
 .admin-editable table{border-collapse:collapse;width:100%;margin:12px 0}
 .admin-editable :is(td,th){border:1px solid #9fb6c1;padding:8px 10px;min-width:60px}
 .admin-editable img{max-width:100%;height:auto;border-radius:6px}
@@ -112,7 +112,7 @@
 .admin-dropzone span{display:grid;gap:5px;font-weight:400}
 .admin-dropzone strong{font-size:20px}
 .admin-dropzone small{font-size:15px;color:#566b76}
-.admin-dropzone.active{border-color:#f26442;background:#fff5f1}
+.admin-dropzone.active{border-color:#1b5fc1;background:#e9f1fc}
 .admin-upload-big{width:100%;font-size:18px;padding:22px}
 .admin-media-tools{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin-top:26px}
 .admin-media-tools .admin-search{margin:0;flex:1;min-width:260px}
@@ -132,8 +132,8 @@
 .admin-media-item button,.admin-media-actions button{display:inline-flex;align-items:center;gap:5px;font-size:14px;padding:9px 11px;border-radius:9px;background:#e9f1f4;border:0;color:#1f3843}
 .admin-media-actions button.danger{background:#fbe9e4;color:#94290f}
 .admin-media-choice{cursor:pointer;text-align:left;font:inherit}
-.admin-media-choice:hover{border-color:#f26442}
-.admin-media-choice>span{margin-top:auto;font-weight:700;color:#b8401f;font-size:15px}
+.admin-media-choice:hover{border-color:#1b5fc1}
+.admin-media-choice>span{margin-top:auto;font-weight:700;color:#134a99;font-size:15px}
 .admin-rename{display:grid;gap:6px;width:100%}
 .admin-rename input{width:100%;font:inherit;font-size:16px;padding:9px 10px;border:1.5px solid #9fb6c1;border-radius:9px}
 .admin-rename :is(.admin-primary,.admin-secondary){min-height:42px;font-size:15px;padding:8px 12px}
@@ -224,4 +224,4 @@
   .admin-list-open{display:none}
   .admin-confirm-actions button{min-width:100%}
 }
-.admin-required{color:#eb6848}
+.admin-required{color:#b3361b}
